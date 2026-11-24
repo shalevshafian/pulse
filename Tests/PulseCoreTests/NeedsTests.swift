@@ -224,13 +224,15 @@ final class NeedsTests: XCTestCase {
         }
         h.add(row(10), at: start)
         h.add(row(40), at: start.addingTimeInterval(60))
-        h.add(row(45), at: start.addingTimeInterval(3600))
-        let s = h.series("process:x", parts: 48, now: start.addingTimeInterval(3600))
+        // Two buckets of one part.
+        h.add(row(42), at: start.addingTimeInterval(3600))
+        h.add(row(45), at: start.addingTimeInterval(3900))
+        let s = h.series("process:x", parts: 48, now: start.addingTimeInterval(3900))
         XCTAssertEqual(s.count, 48)
         XCTAssertEqual(s[47], 5)
         XCTAssertEqual(s.compactMap { $0 }.reduce(0, +), 35)
         XCTAssertNil(s[0], "not running is not idle")
-        XCTAssertEqual(h.series("process:y", parts: 48, now: start.addingTimeInterval(3600))[47], 0)
+        XCTAssertEqual(h.series("process:y", parts: 48, now: start.addingTimeInterval(3900))[47], 0)
     }
 
     func testAShortcutFromANewerVersionLosesNothing() throws {

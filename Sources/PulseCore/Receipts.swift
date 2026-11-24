@@ -53,10 +53,8 @@ public struct Receipts: Codable, Sendable, Equatable {
 
     /// Only if it is still in the Trash and nothing has taken its old place. Nothing is overwritten.
     public static func putBack(from: String, to: String) -> Bool {
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: from), !fm.fileExists(atPath: to), (try? fm.attributesOfItem(atPath: to)) == nil,
-              fm.fileExists(atPath: (to as NSString).deletingLastPathComponent) else { return false }
-        return (try? fm.moveItem(atPath: from, toPath: to)) != nil
+        // The move itself refuses to take a place that is taken, by a link too.
+        (try? FileManager.default.moveItem(atPath: from, toPath: to)) != nil
     }
 
     /// For pasting into a terminal. The folder is quoted whatever is in its name.
