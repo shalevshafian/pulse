@@ -88,15 +88,15 @@ extension Model {
         return out.map { (name: $0.0, value: $0.1) }
     }
 
-    /// The whole name is the word, so nothing else is protected by accident more than its name allows.
+    /// The whole name becomes a word of the rules. A broader word the user wrote stays theirs to remove.
     func protect(_ name: String, _ on: Bool) {
         if on {
             if !settings.isProtected(name) { settings.neverTouch.append(name) }
-        } else {
-            settings.neverTouch.removeAll { w in
-                let word = w.trimmingCharacters(in: .whitespaces).lowercased()
-                return !word.isEmpty && name.lowercased().contains(word)
-            }
+            return
+        }
+        settings.neverTouch.removeAll { $0.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(name) == .orderedSame }
+        if let word = settings.neverTouch.first(where: { w in name.lowercased().contains(w.trimmingCharacters(in: .whitespaces).lowercased()) && !w.isEmpty }) {
+            notice = "Protected by the word \u{201C}\(word)\u{201D} in Rules"
         }
     }
 
