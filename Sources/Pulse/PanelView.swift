@@ -2,7 +2,7 @@ import AppKit
 import PulseCore
 import SwiftUI
 
-enum Page: String { case welcome, overview, health, cleanup, plan, done, sessions, processes, rules, alerts, display, drives }
+enum Page: String { case welcome, overview, health, cleanup, plan, done, sessions, processes, rules, alerts, display, drives, sleep }
 
 /// The look: always dark. Near-black ground, white ink, one-pixel lines instead of boxes,
 /// whole-point type sizes. Drawings are capsules and dots. Orange only for something urgent
@@ -38,6 +38,7 @@ struct PanelView: View {
     @State private var wantsAlerts = true
     @State private var wantsLogin = true
     @State private var copied = false
+    @State private var sleepBack = Page.drives
     private let inWindow: Bool
 
     static let goTo = Notification.Name("pulse.goto")
@@ -66,6 +67,7 @@ struct PanelView: View {
                 case .processes: processes
                 case .rules: ScrollView(showsIndicators: false) { VStack(alignment: .leading, spacing: gap) { rules } }
                 case .drives: drivesPage
+                case .sleep: SleepPage(model: model, back: { go(sleepBack) }, open: { filter = $0; go(.processes) })
                 case .alerts: ScrollView(showsIndicators: false) { VStack(alignment: .leading, spacing: gap) { alerts } }
                 case .display: ScrollView(showsIndicators: false) { VStack(alignment: .leading, spacing: gap) { display } }
                 }
@@ -301,6 +303,7 @@ struct PanelView: View {
                             switch f {
                             case .cleanup: toClean = []; go(.cleanup)
                             case .plan: selected = model.defaultSelection(); go(.plan)
+                            case .sleep: sleepBack = .health; go(.sleep)
                             default: model.fix(f)
                             }
                         }, ignore: { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { model.ignore(c, true) } })
@@ -343,7 +346,10 @@ struct PanelView: View {
                     Text(c.title).font(.system(size: 12)).lineLimit(1)
                     Spacer(minLength: 6)
                     Text(c.detail).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+                    if c.fix == .sleep { Image(systemName: "chevron.right").font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary) }
                 }
+                .contentShape(Rectangle())
+                .onTapGesture { if c.fix == .sleep { sleepBack = .health; go(.sleep) } }
                 .help(c.detail)
             }
         }
@@ -396,6 +402,7 @@ struct PanelView: View {
         let rows = model.drives ?? []
         return Group {
             PageHeader(title: "Drives in sleep", count: rows.count) { go(.overview) }
+            AwakeRow(holders: model.snap?.awake) { sleepBack = .drives; go(.sleep) }
             Text("A ticked drive is disconnected just before the Mac sleeps and comes back when it wakes. The others are left alone.")
                 .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
             if rows.isEmpty {
@@ -411,7 +418,7 @@ struct PanelView: View {
                         }
                     }
                 }
-                .frame(height: min(CGFloat(rows.count) * 40, 240))
+                .frame(height: min(CGFloat(rows.count) * 40, 200))
                 .tile()
             }
             Spacer(minLength: 0)
@@ -1004,7 +1011,7 @@ extension View {
 }
 
 /// A tile's name, and a count beside it when the count says something.
-private struct TileLabel: View {
+struct TileLabel: View {
     let title: String
     var count: String?
     init(_ title: String, count: String? = nil) { self.title = title; self.count = count }
@@ -1261,7 +1268,7 @@ private struct Choice: View {
     }
 }
 
-private struct PressStyle: ButtonStyle {
+struct PressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
@@ -1269,7 +1276,7 @@ private struct PressStyle: ButtonStyle {
     }
 }
 
-private struct PageHeader: View {
+struct PageHeader: View {
     let title: String
     var count: Int?
     let back: () -> Void

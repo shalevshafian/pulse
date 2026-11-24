@@ -7,10 +7,13 @@ public final class MCPServer {
 
     let provider: Provider
     let healthStore: () -> HealthStore
+    let sleepCost: () -> SleepCost
 
     public init(provider: @escaping Provider = { Snapshot.take(system: SystemSampler().sampleBlocking()) },
-                healthStore: @escaping () -> HealthStore = { HealthStore.load() }) {
+                healthStore: @escaping () -> HealthStore = { HealthStore.load() },
+                sleepCost: @escaping () -> SleepCost = { SleepCost.load() }) {
         self.provider = provider
+        self.sleepCost = sleepCost
         self.healthStore = healthStore
     }
 
@@ -22,6 +25,7 @@ public final class MCPServer {
         ("top_cpu", "What is using the CPU right now: Claude sessions (whole process tree), apps and other processes grouped by name. cpuPercent is the share of the whole machine."),
         ("top_memory", "What is using the most memory right now, grouped the same way as top_cpu."),
         ("dev_runtimes", "Booted iOS simulators, running Android emulators and Gradle or Kotlin build daemons on this Mac: name, UDID or emulator serial, memory, CPU share and how long each has been up. Check here before booting another one."),
+        ("sleep_blockers", "What asks this Mac not to sleep right now (app, session or process, why, since when), and the last sleeps: how long, how much charge each cost on battery, how often the Mac woke by itself."),
         ("optimize_suggestions", "Ranked suggestions for freeing memory (reclaimBytes is what a row holds now, the most that closing it can give back): long-idle Claude sessions (stillWorking marks one whose own processes are running), leftover agent processes, simulators, emulators and build daemons up for over an hour, heavy apps. Read-only; the user applies them from the Pulse menu bar item."),
         ("health_report", "The last health check of this Mac: score out of 100, the open problems (backup, protection, updates, storage, battery, stability, performance, startup items), what could not be read, and folders that can be rebuilt. Reads the stored report and gives its age; it does not run a check."),
     ]
@@ -78,6 +82,9 @@ public final class MCPServer {
         case "top_cpu": return json(snap.topCPU)
         case "top_memory": return json(snap.topMemory)
         case "dev_runtimes": return json(snap.runtimes)
+        case "sleep_blockers":
+            struct Out: Encodable { var blockers: [AwakeHolder]?, sleeps: [SleepRecord] }
+            return json(Out(blockers: snap.awake, sleeps: sleepCost().sleeps))
         case "optimize_suggestions": return json(snap.suggestions)
         default: return nil
         }

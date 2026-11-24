@@ -45,6 +45,7 @@ final class Model: ObservableObject {
     @Published var drives: [DriveGuard.Row]?
     @Published var drivesOut: [SleepDrive] = []
     private var driveGuard: DriveGuard?
+    @Published var lastSleep: SleepRecord?
     /// The last two minutes, as fractions 0...1, for the graphs.
     @Published var cpuHistory: [Double] = []
     @Published var memHistory: [Double] = []
@@ -196,6 +197,7 @@ final class Model: ObservableObject {
         system = Demo.system
         snap = Demo.snapshot()
         health = Demo.health()
+        lastSleep = Demo.lastSleep()
         syncScene()
         result = OptimizeResult(lines: [
             .init(text: "Closed: Icon set", ok: true), .init(text: "Closed: Release notes", ok: true),
@@ -478,6 +480,15 @@ final class Model: ObservableObject {
         driveGuard?.rows(settings.sleepDrives) { [weak self] rows, out in
             self?.drives = rows
             self?.drivesOut = out
+        }
+    }
+
+    func refreshSleep() {
+        guard live else { return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            // A desktop Mac has no charge to lose.
+            let last = Charge.read() == nil ? nil : SleepCost.load().last(now: Date())
+            DispatchQueue.main.async { self.lastSleep = last }
         }
     }
 

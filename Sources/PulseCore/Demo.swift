@@ -53,8 +53,17 @@ public enum Demo {
         offers[5].runtimeKind = .buildDaemon
         var snap = Snapshot(system: system, sessions: sessions, apps: [], topCPU: Consumers.topCPU(consumers, 8), topMemory: Consumers.topMemory(consumers, 8),
                             consumers: consumers, runtimes: runtimes, suggestions: offers)
+        snap.awake = [
+            AwakeHolder(name: "Music", kind: .app, reason: "audio", since: now.addingTimeInterval(-3 * 3600), pids: [93]),
+            AwakeHolder(name: "Checkout page", kind: .session, reason: "caffeinate", since: now.addingTimeInterval(-42 * 60), pids: [94]),
+            AwakeHolder(name: "Safari", kind: .app, reason: "Playing video", since: now.addingTimeInterval(-9 * 60), pids: [95]),
+        ]
         snap.headline = Insights.headline(snap)
         return snap
+    }
+
+    public static func lastSleep(now: Date = Date()) -> SleepRecord {
+        SleepRecord(from: now.addingTimeInterval(-12 * 3600), to: now.addingTimeInterval(-4 * 3600), lost: 4, darkWakes: 3)
     }
 
     public static func health(now: Date = Date()) -> HealthStore {
@@ -65,6 +74,7 @@ public enum Demo {
             .init("update-macos", .updates, .attention, "Update waiting: macOS 26.7.3", "26.4 is installed. Offered 8 days ago.", weight: 8, fix: .softwareUpdate),
         ] + HealthRules.protection(fileVault: "FileVault is On.", sip: "status: enabled", gatekeeper: "assessments enabled", firewall: "Firewall is enabled.")
             + HealthRules.battery(["AppleRawMaxCapacity": 8110, "DesignCapacity": 8579, "CycleCount": 112])
+            + HealthRules.sleep(holders: snapshot(now: now).awake, charge: Charge(percent: 80, onBattery: false), cost: SleepCost(), now: now)
             + HealthRules.disk(free: system.diskFreeBytes, total: system.diskTotalBytes, smart: "SMART Status: Verified", history: [])
             + HealthRules.stability([], bootedAt: now.addingTimeInterval(-4 * 86400), now: now)
             + HealthRules.performance(system)

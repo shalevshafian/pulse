@@ -22,7 +22,7 @@ public enum HealthArea: String, Codable, CaseIterable, Sendable {
 public enum HealthState: String, Codable, Sendable { case ok, attention, urgent, unknown }
 
 public enum HealthFix: String, Codable, Sendable {
-    case timeMachine, firewall, privacy, softwareUpdate, battery, loginItems, storage, cleanup, acceptStartup, plan
+    case timeMachine, firewall, privacy, softwareUpdate, battery, loginItems, storage, cleanup, acceptStartup, plan, sleep
 
     /// The System Settings page. Pulse opens it; the user changes it.
     public var settingsURL: String? {
@@ -35,7 +35,7 @@ public enum HealthFix: String, Codable, Sendable {
         case .battery: return base + "com.apple.Battery-Settings.extension"
         case .loginItems: return base + "com.apple.LoginItems-Settings.extension"
         case .storage: return base + "com.apple.settings.Storage"
-        case .cleanup, .acceptStartup, .plan: return nil
+        case .cleanup, .acceptStartup, .plan, .sleep: return nil
         }
     }
 
@@ -51,6 +51,7 @@ public enum HealthFix: String, Codable, Sendable {
         case .cleanup: return "See what to clear"
         case .acceptStartup: return "I know it"
         case .plan: return "Open Optimize"
+        case .sleep: return "See what it is"
         }
     }
 }
@@ -107,7 +108,7 @@ public struct HealthStore: Codable, Sendable {
     public var notified: [String: Date] = [:]
     /// The wording and rules the report was made with. A report from another version is taken again.
     public var rules: Int? = HealthStore.currentRules
-    public static let currentRules = 2
+    public static let currentRules = 3
 
     public init() {}
 
@@ -450,6 +451,10 @@ public enum HealthProbe {
             return (list as? [[String: Any]])?.first ?? [:]
         }
         checks += HealthRules.battery(battery)
+        let table = ProcTable.live(), runtimes = Runtimes.detect(table: table, now: now)
+        checks += HealthRules.sleep(
+            holders: Awake.read(table: table, sessions: ClaudeSessions.load(table: table), runtimes: runtimes),
+            charge: Charge.read(), cost: SleepCost.load(), now: now)
         checks += HealthRules.disk(free: system.diskFreeBytes, total: system.diskTotalBytes,
                                    smart: tool("/usr/sbin/diskutil", ["info", "disk0"]), history: store.history)
         checks += HealthRules.stability(crashes(now: now), bootedAt: bootTime(), now: now)
@@ -465,7 +470,7 @@ public enum HealthProbe {
         }
         checks += HealthRules.startup(items, known: store.knownStartup)
 
-        let cleanup = Cleanup.find(home: NSHomeDirectory(), table: ProcTable.live(), settings: settings, now: now)
+        let cleanup = Cleanup.find(home: NSHomeDirectory(), table: table, settings: settings, now: now)
         let bytes = cleanup.reduce(0) { $0 + $1.bytes }
         if bytes >= 5 << 30 {
             checks.append(.init("cleanup", .storage, .attention, String(format: "%.1f GB can be cleared", Double(bytes) / 1_073_741_824),

@@ -44,6 +44,8 @@ public struct Snapshot: Codable, Sendable {
     public var sessionHosts: [String] = []
     /// Booted simulators, running emulators and build daemons, each as one tree.
     public var runtimes: [DevRuntime] = []
+    /// What asks this Mac to stay awake. Nil when macOS did not say.
+    public var awake: [AwakeHolder]? = nil
     /// One sentence on what stands out right now, or nil when nothing does.
     public var headline: String? = nil
     public var suggestions: [Suggestion]
@@ -71,6 +73,7 @@ public struct Snapshot: Codable, Sendable {
             suggestions: Suggestions.build(system: system, sessions: sessions, apps: apps, table: table, sessionPids: sessionPids,
                                            launchdJobs: LaunchdJobs.live(), protectedBundles: hosts, runtimes: runtimes, now: now)
                 .filter { !settings.isProtected($0.title, $0.detail) })
+        snap.awake = Awake.read(table: table, sessions: sessions, runtimes: runtimes)
         snap.headline = Insights.headline(snap)
         return snap
     }

@@ -17,6 +17,7 @@ final class DriveGuard {
     /// Grows on every sleep, so retries of an older wake stop.
     private var round = 0
     private var observers: [NSObjectProtocol] = []
+    private var cost = SleepCost.load()
 
     var onRefused: (([SleepDrives.Refusal]) -> Void)?
     var onStillOut: (([SleepDrive]) -> Void)?
@@ -38,10 +39,11 @@ final class DriveGuard {
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: nil) { [weak self] _ in
                 guard let self else { return }
-                self.queue.async { self.connect(after: [0, 3, 8]) }
+                self.queue.async { self.connect(after: [0, 3, 8]); self.noteWake(after: [0, 5]) }
             })
         // What an earlier run disconnected and did not get to connect.
         queue.async { self.connect(after: [0, 3]) }
+        queue.async { self.noteWake(after: [0]) }
     }
 
     // iokit_common_msg() is a macro Swift does not import.
@@ -54,6 +56,7 @@ final class DriveGuard {
             IOAllowPowerChange(root, id)
         case Self.willSleep:
             round += 1
+            cost.willSleep(Charge.read(), at: Date())
             lock.lock(); let list = wanted; lock.unlock()
             if !list.isEmpty {
                 let began = Date()
@@ -66,6 +69,7 @@ final class DriveGuard {
             IOAllowPowerChange(root, id)
         case Self.poweredOn:
             connect(after: [1, 3, 6, 12, 20])
+            noteWake(after: [2, 10])
         default: break
         }
     }
@@ -86,6 +90,17 @@ final class DriveGuard {
                     self.log("wake: still out \(left.map(\.name))")
                     self.onStillOut?(left)
                 }
+            }
+        }
+    }
+
+    /// The end of a sleep, once somebody is there. A dark wake ends nothing.
+    private func noteWake(after delays: [Double]) {
+        let mine = round
+        for d in delays {
+            queue.asyncAfter(deadline: .now() + d) { [weak self] in
+                guard let self, self.round == mine, PowerState.mayConnect() else { return }
+                if self.cost.fullWake(Charge.read(), darkWakes: SleepCost.readDarkWakes(), at: Date()) { self.cost.save(to: SleepCost.defaultURL) }
             }
         }
     }

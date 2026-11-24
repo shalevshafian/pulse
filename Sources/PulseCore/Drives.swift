@@ -222,6 +222,7 @@ public final class DiskArbitrationOps: DriveOps {
 
 /// The lid and the wake, as the kernel's power domain reports them.
 public enum PowerState {
+    /// Awake with somebody there: not a dark wake, and not a wake under a shut lid.
     public static func mayConnect() -> Bool {
         let root = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))
         guard root != 0 else { return true }
