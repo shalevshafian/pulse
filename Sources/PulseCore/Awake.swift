@@ -18,8 +18,16 @@ public enum Awake {
     /// Nil when macOS does not answer.
     public static func read(table: ProcTable, sessions: [ClaudeSession], runtimes: [DevRuntime]) -> [AwakeHolder]? {
         var ref: Unmanaged<CFDictionary>?
-        guard IOPMCopyAssertionsByProcess(&ref) == kIOReturnSuccess, let dict = ref?.takeRetainedValue() as? [NSNumber: [[String: Any]]] else { return nil }
-        return holders(Dictionary(dict.map { ($0.key.int32Value, $0.value) }, uniquingKeysWith: +), table: table, sessions: sessions, runtimes: runtimes)
+        let code = IOPMCopyAssertionsByProcess(&ref)
+        return answer(code, ref?.takeRetainedValue()).map { holders($0, table: table, sessions: sessions, runtimes: runtimes) }
+    }
+
+    /// Success without a list is a Mac nothing keeps awake. A failure, or a list of another shape, is not known.
+    static func answer(_ code: IOReturn, _ dict: CFDictionary?) -> [Int32: [[String: Any]]]? {
+        guard code == kIOReturnSuccess else { return nil }
+        guard let dict else { return [:] }
+        guard let typed = dict as? [NSNumber: [[String: Any]]] else { return nil }
+        return Dictionary(typed.map { ($0.key.int32Value, $0.value) }, uniquingKeysWith: +)
     }
 
     /// One row per name, the longest first. Only what keeps the whole Mac awake: not the display, not

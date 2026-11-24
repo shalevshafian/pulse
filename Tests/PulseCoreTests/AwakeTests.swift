@@ -1,3 +1,4 @@
+import IOKit
 import XCTest
 @testable import PulseCore
 
@@ -71,8 +72,13 @@ final class AwakeTests: XCTestCase {
         XCTAssertEqual(r[0].reason, "old")
     }
 
-    func testThisMacAnswers() {
-        XCTAssertNotNil(Awake.read(table: ProcTable([]), sessions: [], runtimes: []))
+    func testNothingHeldIsNotAFailedReading() {
+        XCTAssertEqual(Awake.answer(kIOReturnSuccess, nil)?.count, 0)
+        XCTAssertEqual(Awake.answer(kIOReturnSuccess, [:] as CFDictionary)?.count, 0)
+        XCTAssertNil(Awake.answer(kIOReturnError, nil))
+        XCTAssertNil(Awake.answer(kIOReturnError, [:] as CFDictionary))
+        XCTAssertNil(Awake.answer(kIOReturnSuccess, ["odd": 1] as CFDictionary))
+        XCTAssertEqual(Awake.answer(kIOReturnSuccess, [NSNumber(value: 50): [["AssertName": "x"]]] as CFDictionary)?[50]?.count, 1)
     }
 
     // MARK: What sleep cost
