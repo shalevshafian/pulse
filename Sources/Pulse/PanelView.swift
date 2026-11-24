@@ -74,8 +74,8 @@ struct PanelView: View {
             .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 6)), removal: .opacity))
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        .padding(.horizontal, 16).padding(.vertical, 15).padding(.top, inWindow ? 16 : 0)
-        .frame(width: contentWidth + 32, height: panelHeight + (inWindow ? 16 : 0))
+        .padding(.horizontal, 16).padding(.vertical, 15)
+        .frame(width: contentWidth + 32, height: panelHeight)
         .foregroundStyle(Ink.ink(.dark))
         .background(Ink.base)
         .background { if !inWindow { WindowShape() } }
