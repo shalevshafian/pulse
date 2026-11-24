@@ -19,7 +19,8 @@ public struct Consumer: Codable, Sendable, Identifiable {
     /// Every process of the row with its CPU time. Not sent to agents.
     public var times: [ProcTime] = []
     private enum CodingKeys: String, CodingKey { case kind, name, rssBytes, cpuPercent, processCount, members, bundlePath, runtimeID }
-    public var id: String { runtimeID ?? "\(kind.rawValue):\(name)" }
+    /// Two sessions can have the same name; a session is its process.
+    public var id: String { runtimeID ?? (kind == .session ? "session:\(members.first?.pid ?? 0)" : "\(kind.rawValue):\(name)") }
 }
 
 public struct ProcRef: Codable, Sendable, Equatable {

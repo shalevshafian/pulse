@@ -11,17 +11,20 @@ public final class MCPServer {
     let history: () -> LoadHistory
     let settings: () -> Settings
     let plan: () -> [PlanUsage]
+    let ports: () -> [OpenPort]?
 
     public init(provider: @escaping Provider = { Snapshot.take(system: SystemSampler().sampleBlocking()) },
                 healthStore: @escaping () -> HealthStore = { HealthStore.load() },
                 sleepCost: @escaping () -> SleepCost = { SleepCost.load() },
                 history: @escaping () -> LoadHistory = { LoadHistory.load() },
                 settings: @escaping () -> Settings = { Settings.load() },
-                plan: @escaping () -> [PlanUsage] = { PlanUsage.read() }) {
+                plan: @escaping () -> [PlanUsage] = { PlanUsage.read() },
+                ports: @escaping () -> [OpenPort]? = { Ports.read() }) {
         self.provider = provider
         self.history = history
         self.settings = settings
         self.plan = plan
+        self.ports = ports
         self.sleepCost = sleepCost
         self.healthStore = healthStore
     }
@@ -37,6 +40,8 @@ public final class MCPServer {
         ("dev_runtimes", "Booted iOS simulators, running Android emulators and Gradle or Kotlin build daemons on this Mac: name, UDID or emulator serial, memory, CPU share and how long each has been up. Check here before booting another one."),
         ("sleep_blockers", "What asks this Mac not to sleep right now (app, session or process, why, since when), and the last sleeps: how long, how much charge each cost on battery, how often the Mac woke by itself."),
         ("optimize_suggestions", "Ranked suggestions for freeing memory (reclaimBytes is what a row holds now, the most that closing it can give back): long-idle Claude sessions (stillWorking marks one whose own processes are running), leftover agent processes, simulators, emulators and build daemons up for over an hour, heavy apps. Read-only; the user applies them from the Pulse menu bar item."),
+        ("needs_attention", "What deserves the user's attention on this Mac right now, the costliest first: sessions that wait, memory pressure, heat, health findings, space that can be cleared. The same list the panel opens with."),
+        ("open_ports", "TCP ports programs of this user listen on: port, program, pid, and whether it is bound to the network or only to this Mac. Check here before starting a server."),
         ("health_report", "The last health check of this Mac: score out of 100, the open problems (backup, protection, updates, storage, battery, stability, performance, startup items), what could not be read, and folders that can be rebuilt. Reads the stored report and gives its age; it does not run a check."),
     ]
 
@@ -95,8 +100,12 @@ public final class MCPServer {
             return json(Out(since: h.since(now: now), rows: Array(h.rows(now: now).prefix(40))))
         }
         if name == Self.planTool.name { return settings().planUsage ? json(plan()) : nil }
+        if name == "open_ports" { return json(ports()) }
         let snap = provider()
         switch name {
+        case "needs_attention":
+            let s = settings()
+            return json(Needs.build(snap: snap, health: healthStore(), plan: s.planUsage ? plan() : [], hidden: s.hidden, settings: s, now: Date()))
         case "system_usage": return json(snap.system)
         case "claude_sessions": return json(snap.sessions)
         case "top_cpu": return json(snap.topCPU)

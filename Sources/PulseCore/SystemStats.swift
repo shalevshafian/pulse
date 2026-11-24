@@ -15,6 +15,10 @@ public struct SystemStats: Codable, Sendable {
     public var chipTempC: Double? = nil
     public var ssdTempC: Double? = nil
     public var batteryTempC: Double? = nil
+    public var gpuPercent: Double? = nil
+    /// Bytes a second over the last reading. Nil until there are two.
+    public var netDown: Double? = nil
+    public var netUp: Double? = nil
 
     public var memPercent: Double {
         memTotalBytes == 0 ? 0 : Double(memUsedBytes) / Double(memTotalBytes) * 100
@@ -38,6 +42,7 @@ struct CPUTicks {
 public final class SystemSampler {
     private var last: CPUTicks?
     private let sensors = ThermalSensors()
+    private var lastNet: (counts: NetCounts, at: TimeInterval)?
 
     public init() {}
 
@@ -56,6 +61,12 @@ public final class SystemSampler {
         stats.chipTempC = temps.chip
         stats.ssdTempC = temps.ssd
         stats.batteryTempC = temps.battery
+        stats.gpuPercent = GPU.read()
+        if let net = NetCounts.read() {
+            let at = ProcessInfo.processInfo.systemUptime
+            if let lastNet, let r = net.rate(since: lastNet.counts, seconds: at - lastNet.at) { stats.netDown = r.down; stats.netUp = r.up }
+            lastNet = (net, at)
+        }
         switch ProcessInfo.processInfo.thermalState {
         case .nominal: stats.thermal = "nominal"
         case .fair: stats.thermal = "fair"

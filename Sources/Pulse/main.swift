@@ -1,4 +1,6 @@
 import AppKit
+import Carbon.HIToolbox
+import Combine
 import PulseCore
 import SwiftUI
 
@@ -6,14 +8,26 @@ import SwiftUI
 /// item can be out of sight, behind the notch or on a full bar. The first launch does the same.
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var window: NSWindow?
+    private var hotKey: HotKey?
+    private var watching: AnyCancellable?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if !Model.shared.settings.welcomed { show(.welcome) }
+        watching = Model.shared.$settings.map(\.shortcut).removeDuplicates().receive(on: RunLoop.main).sink { [weak self] k in
+            self?.hotKey = nil
+            self?.hotKey = HotKey(k) { MainActor.assumeIsolated { self?.toggle() } }
+            if k != .off, self?.hotKey == nil { Model.shared.notice = "Another app holds that key" }
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         show(Model.shared.settings.welcomed ? .overview : .welcome)
         return false
+    }
+
+    /// The key again puts it away.
+    @MainActor private func toggle() {
+        if let w = window, w.isKeyWindow { w.close() } else { show(Model.shared.settings.welcomed ? .overview : .welcome) }
     }
 
     @MainActor private func show(_ page: Page) {
@@ -41,6 +55,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window?.contentView = nil
         window = nil
         Model.shared.closed()
+    }
+}
+
+/// One key for the whole system. Needs no permission: macOS tells Pulse of this key only, and of no other.
+final class HotKey {
+    private var ref: EventHotKeyRef?
+    private var handler: EventHandlerRef?
+    private let action: () -> Void
+
+    init?(_ key: PulseCore.Settings.Shortcut, action: @escaping () -> Void) {
+        self.action = action
+        let modifiers: Int
+        switch key {
+        case .off: return nil
+        case .controlOptionP: modifiers = controlKey | optionKey
+        case .optionCommandP: modifiers = optionKey | cmdKey
+        }
+        var kind = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        let me = Unmanaged.passUnretained(self).toOpaque()
+        InstallEventHandler(GetApplicationEventTarget(), { _, _, data in
+            data.map { Unmanaged<HotKey>.fromOpaque($0).takeUnretainedValue().action() }
+            return noErr
+        }, 1, &kind, me, &handler)
+        guard RegisterEventHotKey(UInt32(kVK_ANSI_P), UInt32(modifiers), EventHotKeyID(signature: 0x504C5345, id: 1), GetApplicationEventTarget(), 0, &ref) == noErr else { return nil }
+    }
+
+    deinit {
+        if let ref { UnregisterEventHotKey(ref) }
+        if let handler { RemoveEventHandler(handler) }
     }
 }
 
@@ -81,7 +124,8 @@ func renderPanel(to path: String) {
         model.checkOnce()
     }
     model.scene.changedAt = Model.clock - 10
-    if pageArg() == .drives { model.loadDrivesOnce(demo: demo) }
+    if !demo, pageArg() == .drives || pageArg() == .care { model.loadDrivesOnce(demo: false) }
+    if !demo { model.ports = Ports.read() }
     snapshotView(PanelView(model: model, page: pageArg()), to: path)
 }
 

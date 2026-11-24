@@ -22,7 +22,7 @@ struct PastRow<Trailing: View>: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Glyph(kind: row.kind == .session ? .lines : row.kind == .app ? .block : row.kind == .runtime ? .cross : .slash)
+            Glyph(kind: Glyph.of(row.kind))
             VStack(alignment: .leading, spacing: 1) {
                 Text(row.name).font(.system(size: 12)).lineLimit(1)
                 Text(row.peakBytes > 0 ? "Up to \(Fmt.bytes(row.peakBytes))" : "Little memory").font(.system(size: 10)).foregroundStyle(.secondary)

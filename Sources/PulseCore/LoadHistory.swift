@@ -102,6 +102,20 @@ public struct LoadHistory: Codable, Sendable {
         .sorted { $0.cpuSeconds != $1.cpuSeconds ? $0.cpuSeconds > $1.cpuSeconds : $0.id < $1.id }
     }
 
+    /// CPU time of one row over the twelve hours, oldest first, in as many equal parts. Nil for a part
+    /// Pulse was not running in, which is not the same as idle.
+    public func series(_ id: String, parts: Int, now: Date) -> [Double?] {
+        let end = Int(now.timeIntervalSince1970) / Self.width * Self.width + Self.width
+        let span = Self.width * Self.count / max(parts, 1)
+        var out = [Double?](repeating: nil, count: max(parts, 1))
+        for b in buckets {
+            let at = parts - 1 - (end - 1 - b.start) / span
+            guard b.start < end, out.indices.contains(at) else { continue }
+            out[at] = (out[at] ?? 0) + (b.cpu[id] ?? 0)
+        }
+        return out
+    }
+
     public func since(now: Date) -> Date? {
         let oldest = Int(now.timeIntervalSince1970) - Self.width * Self.count
         return buckets.first { $0.start > oldest }.map { Date(timeIntervalSince1970: Double($0.start)) }

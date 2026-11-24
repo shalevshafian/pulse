@@ -6,7 +6,7 @@ public enum Demo {
     public static let system = SystemStats(
         cpuPercent: 23, memUsedBytes: 19 << 30, memTotalBytes: 32 << 30, memPressureLevel: 1, swapUsedBytes: 0,
         diskFreeBytes: 412_000_000_000, diskTotalBytes: 994_000_000_000, thermal: "nominal",
-        chipTempC: 54, ssdTempC: 38, batteryTempC: 31)
+        chipTempC: 54, ssdTempC: 38, batteryTempC: 31, gpuPercent: 17, netDown: 480_000, netUp: 62_000)
 
     public static func snapshot(now: Date = Date()) -> Snapshot {
         func session(_ pid: Int32, _ name: String, _ project: String, _ from: String, idle hours: Double?, _ mb: UInt64, cpu: Double, child: String? = nil, waits: String? = nil) -> ClaudeSession {
@@ -28,7 +28,10 @@ public enum Demo {
         }
         let runtimes = [runtime(.simulator, "iPhone 17 simulator", 5_240, 16, 91), runtime(.buildDaemon, "Gradle 8.11.1", 2_310, 3, 92)]
         func row(_ kind: Consumer.Kind, _ name: String, _ mb: UInt64, _ cpu: Double, _ n: Int = 1) -> Consumer {
-            Consumer(kind: kind, name: name, rssBytes: mb << 20, cpuPercent: cpu, processCount: n, members: [root])
+            let pid = sessions.first { $0.name == name }?.pid
+            return Consumer(kind: kind, name: name, rssBytes: mb << 20, cpuPercent: cpu, processCount: n,
+                            members: [pid.map { ProcRef(pid: $0, lstart: "") } ?? (name == "node" ? ProcRef(pid: 89, lstart: "") : root)],
+                            bundlePath: kind == .app ? "/Applications/\(name).app" : nil)
         }
         var consumers = [
             row(.process, "rustc", 1_480, 9.2, 4), row(.session, "Checkout page", 612, 4.8), row(.app, "Safari", 3_120, 3.1, 14),
@@ -78,6 +81,22 @@ public enum Demo {
          PlanUsage(tool: "Codex", readAt: now.addingTimeInterval(-12 * 60), limits: [.init(name: "week", percent: 26, resetsAt: now.addingTimeInterval(4 * 86400))])]
     }
 
+    public static let ports = [
+        OpenPort(port: 3000, program: "node", pid: 89, network: true), OpenPort(port: 5432, program: "postgres", pid: 96, network: false),
+        OpenPort(port: 5173, program: "node", pid: 89, network: false), OpenPort(port: 6379, program: "redis-server", pid: 97, network: false),
+        OpenPort(port: 7000, program: "ControlCenter", pid: 98, network: true), OpenPort(port: 8081, program: "java", pid: 92, network: true),
+    ]
+
+    public static func receipts(now: Date = Date()) -> [Receipt] {
+        [
+            Receipt(at: now.addingTimeInterval(-90_000), title: "npm cache", detail: "Moved to the Trash", bytes: 3 << 30, back: .trash(from: "/Users/me/.Trash/_cacache", to: "/Users/me/.npm/_cacache")),
+            Receipt(at: now.addingTimeInterval(-30), title: "node server.js", detail: "Not closed, the process changed", ok: false),
+            Receipt(at: now.addingTimeInterval(-28), title: "Photo Studio", detail: "Asked to quit", bytes: 2_900 << 20, back: .app(path: "/Applications/Photo Studio.app")),
+            Receipt(at: now.addingTimeInterval(-26), title: "Release notes", detail: "Session closed", bytes: 318 << 20, back: .session(cwd: "/Users/me/Code/docs", id: "demo")),
+            Receipt(at: now.addingTimeInterval(-24), title: "Icon set", detail: "Session closed", bytes: 263 << 20, back: .session(cwd: "/Users/me/Code/storefront", id: "demo")),
+        ]
+    }
+
     public static func past() -> [LoadHistory.Row] {
         func row(_ kind: Consumer.Kind, _ name: String, _ seconds: Double, _ mb: UInt64) -> LoadHistory.Row {
             LoadHistory.Row(kind: kind, name: name, cpuSeconds: seconds, peakBytes: mb << 20)
@@ -93,7 +112,9 @@ public enum Demo {
 
     public static func health(now: Date = Date()) -> HealthStore {
         var s = HealthStore()
-        s.history = [HealthDay(day: HealthStore.day(now.addingTimeInterval(-5 * 86400)), score: 78, diskFreeBytes: 420_000_000_000)]
+        s.history = [61, 61, 66, 66, 72, 70, 70, 75, 78, 78, 78, 81, 81, 78, 78].enumerated().map {
+            HealthDay(day: HealthStore.day(now.addingTimeInterval(Double($0.offset - 15) * 86400)), score: $0.element, diskFreeBytes: 420_000_000_000)
+        }
         let checks: [HealthCheck] = [
             .init("backup", .backup, .attention, "Last backup was 12 days ago", "Connect the backup disk.", weight: 8, fix: .timeMachine),
             .init("update-macos", .updates, .attention, "Update waiting: macOS 26.7.3", "26.4 is installed. Offered 8 days ago.", weight: 8, fix: .softwareUpdate),

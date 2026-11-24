@@ -1,36 +1,45 @@
 import PulseCore
 import SwiftUI
 
-/// What asks this Mac to stay awake, and what the last sleep cost. Nothing is ended here: a row
-/// leads to its process, where the two presses are.
+/// What asks this Mac to stay awake, what the last sleep cost, and keeping it awake on purpose.
+/// Nothing of others is ended here: a row leads to its process, where the two presses are.
 struct SleepPage: View {
     @ObservedObject var model: Model
-    let back: () -> Void
-    let open: (String) -> Void
+    @ObservedObject var ui: PanelState
 
     var body: some View {
         let rows = model.snap?.awake ?? []
-        PageHeader(title: "Sleep", count: rows.count, back: back)
-        Text("What asks this Mac to stay awake. Pulse stops nothing here; the row opens its process.")
-            .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
-        if rows.isEmpty {
-            Text(model.snap == nil ? "Checking…" : model.snap?.awake == nil ? "macOS did not answer" : "Nothing keeps this Mac awake")
-                .font(.system(size: 12)).foregroundStyle(.secondary).tile()
-        } else {
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 6) { ForEach(rows) { row($0) } }
+        PageHeader(title: "Sleep", count: rows.count) { ui.back() }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Keep awake").font(.system(size: 12, weight: .medium))
+                Spacer()
+                Choice(options: [0, 1, 4, 8], value: Binding(get: { model.awakeHours }, set: { model.keepAwake(hours: $0) })) { $0 == 0 ? "Off" : "\(Int($0)) h" }
             }
-            .frame(height: min(CGFloat(rows.count) * 38 - 6, 222))
-            .tile()
+            Text(model.awakeUntil.map { "Until \(Fmt.clock($0)), or until Pulse quits. The display may still go dark." } ?? "The Mac stays awake while the display may go dark. It ends by itself.")
+                .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
-        if let s = model.lastSleep {
-            VStack(alignment: .leading, spacing: 4) {
-                TileLabel("Last sleep")
-                Text(Self.line(s)).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
+        .tile()
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: gap) {
+                VStack(alignment: .leading, spacing: 6) {
+                    TileLabel("Asks this Mac to stay awake")
+                    if rows.isEmpty {
+                        Text(model.snap == nil ? "Checking…" : model.snap?.awake == nil ? "macOS did not answer" : "Nothing does").font(.system(size: 12)).foregroundStyle(.secondary)
+                    }
+                    ForEach(rows) { row($0) }
+                }
+                .tile()
+                if let s = model.lastSleep {
+                    VStack(alignment: .leading, spacing: 4) {
+                        TileLabel("Last sleep")
+                        Text(Self.line(s)).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
+                    }
+                    .tile()
+                }
             }
-            .tile()
         }
-        Spacer(minLength: 0)
+        .frame(maxHeight: .infinity)
         Text("While its display is on the Mac stays awake anyway. That is not listed, and neither is a mounted drive.")
             .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
             .onAppear { model.refreshSleep() }
@@ -44,9 +53,10 @@ struct SleepPage: View {
     }
 
     private func row(_ h: AwakeHolder) -> some View {
-        Button { open(h.name) } label: {
+        let target = model.snap?.consumers.first { c in c.times.contains { h.pids.contains($0.pid) } && c.name == h.name } ?? model.snap?.consumers.first { $0.kind == h.kind && $0.name == h.name }
+        return Button { (target?.id).map(ui.openRow) } label: {
             HStack(spacing: 8) {
-                Glyph(kind: h.kind == .session ? .lines : h.kind == .app ? .block : h.kind == .runtime ? .cross : .slash)
+                Glyph(kind: Glyph.of(h.kind))
                 VStack(alignment: .leading, spacing: 1) {
                     Text(h.name).font(.system(size: 12)).lineLimit(1)
                     Text(h.reason).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
@@ -55,12 +65,12 @@ struct SleepPage: View {
                 if let since = h.since {
                     Text(Fmt.duration(Date().timeIntervalSince(since))).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
                 }
-                Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
+                Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary).opacity(target == nil ? 0 : 1)
             }
             .frame(height: 32)
             .contentShape(Rectangle())
         }
-        .buttonStyle(PressStyle())
+        .buttonStyle(PressStyle()).disabled(target == nil)
         .help(h.reason)
     }
 }
@@ -76,15 +86,5 @@ struct AwakeRow: View {
         return "Awake because of \(first.name)" + (h.count > 1 ? " and \(h.count - 1) more" : "")
     }
 
-    var body: some View {
-        Button(action: action) {
-            HStack {
-                Text(text).font(.system(size: 12)).lineLimit(1)
-                Spacer(minLength: 6)
-                Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
-            }
-            .tile(padding: 9)
-        }
-        .buttonStyle(PressStyle())
-    }
+    var body: some View { line(text, icon: "chevron.right", action).tile(padding: 9) }
 }

@@ -41,6 +41,13 @@ public struct Settings: Codable, Equatable, Sendable {
     /// Drives disconnected before sleep and connected after. Empty until the user ticks one.
     public var sleepDrives: [SleepDrive] = []
 
+    /// Rows of the list on the first page put away for a day, and when.
+    public var hidden: [String: Date] = [:]
+
+    /// A key that opens Pulse from anywhere. Off until picked.
+    public var shortcut = Shortcut.off
+    public enum Shortcut: String, Codable, Sendable, CaseIterable { case off, controlOptionP, optionCommandP }
+
     /// The welcome page was finished. A settings file from before it existed counts as finished.
     public var welcomed = false
 
@@ -69,6 +76,9 @@ public struct Settings: Codable, Equatable, Sendable {
         alertGrowth = try c.decodeIfPresent(Bool.self, forKey: .alertGrowth) ?? d.alertGrowth
         planUsage = try c.decodeIfPresent(Bool.self, forKey: .planUsage) ?? d.planUsage
         sleepDrives = try c.decodeIfPresent([SleepDrive].self, forKey: .sleepDrives) ?? d.sleepDrives
+        hidden = (try? c.decodeIfPresent([String: Date].self, forKey: .hidden)) ?? d.hidden
+        // A value from a newer version must not lose the rest of the file.
+        shortcut = (try? c.decodeIfPresent(Shortcut.self, forKey: .shortcut)) ?? d.shortcut
         welcomed = try c.decodeIfPresent(Bool.self, forKey: .welcomed) ?? true
     }
 

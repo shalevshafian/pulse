@@ -120,7 +120,7 @@ public struct HealthStore: Codable, Sendable {
     public var notified: [String: Date] = [:]
     /// The wording and rules the report was made with. A report from another version is taken again.
     public var rules: Int? = HealthStore.currentRules
-    public static let currentRules = 5
+    public static let currentRules = 6
 
     public init() {}
 
@@ -282,6 +282,11 @@ public enum HealthRules {
         return out.isEmpty ? [.init("updates", .updates, .ok, "Everything is up to date")] : out
     }
 
+    /// Milliamperes, below zero while it drains.
+    static func amperage(_ d: [String: Any]) -> Double? {
+        (d["Amperage"] as? NSNumber).map { Double(Int64(bitPattern: $0.uint64Value)) }
+    }
+
     static func battery(_ d: [String: Any]?) -> [HealthCheck] {
         guard let d else { return [unknown("battery", .battery, "Battery")] }
         if d.isEmpty { return [.init("battery", .battery, .ok, "This Mac has no battery")] }
@@ -301,6 +306,11 @@ public enum HealthRules {
             out.append(.init("battery", .battery, .attention, "Battery health \(health)%", detail + ". Under 80%, consider a replacement.", weight: 8, fix: .battery))
         } else {
             out.append(.init("battery", .battery, .ok, "Battery health \(health)%", detail))
+        }
+        // Plugged in, and still losing charge. A signed figure, stored as an unsigned one.
+        if (d["ExternalConnected"] as? Bool) == true, (d["IsCharging"] as? Bool) == false, let a = amperage(d), a <= -300, (number(d["CurrentCapacity"]) ?? 100) < 95 {
+            let watts = number((d["AdapterDetails"] as? [String: Any])?["Watts"])
+            out.append(.init("charger", .battery, .attention, "The charger is too weak", "The battery drains while plugged in" + (watts.map { String(format: ", on %.0f W.", $0) } ?? "."), weight: 3))
         }
         // Hundredths of a degree.
         if let t = number(d["Temperature"]), t / 100 >= 42 {

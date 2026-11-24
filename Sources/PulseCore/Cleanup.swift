@@ -63,15 +63,24 @@ public enum Cleanup {
     /// Moves one item to the Trash, after checking again that it is still allowed. Never deletes.
     public static func trash(_ item: CleanupItem, home: String = NSHomeDirectory(), table: ProcTable = .live(), settings: Settings,
                              now: Date = Date(), move: (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }) -> Bool {
-        guard !settings.isProtected(item.title, item.path), isPlainDirectory(item.path) else { return false }
+        trashed(item, home: home, table: table, settings: settings, now: now) { try move($0); return nil } != nil
+    }
+
+    /// The same, and where it is now, so that it can be put back. An empty path when the Trash did not say.
+    public static func trashed(_ item: CleanupItem, home: String = NSHomeDirectory(), table: ProcTable = .live(), settings: Settings, now: Date = Date(),
+                               move: (URL) throws -> URL? = {
+                                   var at: NSURL?
+                                   try FileManager.default.trashItem(at: $0, resultingItemURL: &at)
+                                   return at as URL?
+                               }) -> String? {
+        guard !settings.isProtected(item.title, item.path), isPlainDirectory(item.path) else { return nil }
         if let place = places.first(where: { home + "/" + $0.path == item.path }) {
-            guard user(of: item.path, programs: place.users, table: table) == nil else { return false }
+            guard user(of: item.path, programs: place.users, table: table) == nil else { return nil }
         } else {
             guard codeFolders(home: home).contains(where: { item.path.hasPrefix($0 + "/") }), isCargoTarget(item.path), user(of: item.path, programs: [], table: table) == nil,
-                  let touched = lastTouched(item.path), now.timeIntervalSince(touched) >= staleDays * 86400 else { return false }
+                  let touched = lastTouched(item.path), now.timeIntervalSince(touched) >= staleDays * 86400 else { return nil }
         }
-        do { try move(URL(fileURLWithPath: item.path)) } catch { return false }
-        return true
+        do { return try move(URL(fileURLWithPath: item.path))?.path ?? "" } catch { return nil }
     }
 
     /// The name of a running program that uses the folder, or nil.

@@ -53,14 +53,30 @@ final class Model: ObservableObject {
     /// The last twelve hours, while the panel is open. The history itself belongs to `queue`.
     @Published var past: [LoadHistory.Row] = []
     @Published var pastSince: Date?
+    /// The row whose page is open, and its CPU time over the twelve hours.
+    @Published var series: [Double?] = []
+    private var seriesOf: String?
     private var history = LoadHistory()
     private var historySaved = Date()
     private var appNames: [String: String] = [:]
     @Published var lastSleep: SleepRecord?
+    /// Programs that listen, read when a page that shows them opens.
+    @Published var ports: [OpenPort]?
+    @Published private(set) var receipts = Receipts()
+    @Published private(set) var awakeUntil: Date?
+    private let awake = KeepAwake()
+    private var chosenHours = 0.0
     /// The last two minutes, as fractions 0...1, for the graphs.
     @Published var cpuHistory: [Double] = []
     @Published var memHistory: [Double] = []
     @Published var tempHistory: [Double] = []
+    @Published var gpuHistory: [Double] = []
+    /// Against the busiest moment of the last two minutes: a network has no full.
+    var netHistory: [Double] {
+        let top = max(netRates.max() ?? 0, 100_000)
+        return netRates.map { $0 / top }
+    }
+    @Published private var netRates: [Double] = []
     @Published var notificationsAllowed: Bool?
 
     /// What the health checks found, and whether one is running.
@@ -105,6 +121,8 @@ final class Model: ObservableObject {
         if writes { FrameMeter.begin() }
         syncScene()
         refreshSnapshot()
+        refreshPlan()
+        refreshDrives()
     }
 
     func closed() {
@@ -147,6 +165,7 @@ final class Model: ObservableObject {
         RunLoop.main.add(t, forMode: .common)
         timer = t
         if canNotify { queue.async { self.history = LoadHistory.load() } }
+        if writes { receipts = Receipts.load() }
         refreshSnapshot()
         startDriveGuard()
         if canNotify, settings.welcomed, settings.anyAlert || (hasClaude && settings.alertWaiting) { requestNotifications() }
@@ -170,6 +189,9 @@ final class Model: ObservableObject {
         push(&cpuHistory, system.cpuPercent / 100)
         push(&memHistory, system.memPercent / 100)
         if let t = system.chipTempC { push(&tempHistory, Self.tempFraction(t)) }
+        if let g = system.gpuPercent { push(&gpuHistory, g / 100) }
+        if let d = system.netDown, let u = system.netUp { netRates = Array((netRates + [d + u]).suffix(60)) }
+        if let until = awakeUntil, until <= Date() { awakeUntil = nil; awake.stop() }
         scene.setLoad(system.cpuPercent / 100, at: Self.clock)
         ticks += 1
         // A minute after launch, then whenever the last check is six hours old.
@@ -191,7 +213,7 @@ final class Model: ObservableObject {
         refreshing = true
         let system = self.system
         let settings = self.settings
-        let open = panelOpen, keep = canNotify
+        let open = panelOpen, keep = canNotify, wanted = seriesOf
         queue.async {
             let snap = Snapshot.take(system: system, settings: settings)
             let now = Date()
@@ -202,12 +224,26 @@ final class Model: ObservableObject {
                 self.history.save(to: LoadHistory.defaultURL)
             }
             let past = open ? (self.history.rows(now: now), self.history.since(now: now)) : nil
+            let series = wanted.map { self.history.series($0, parts: 48, now: now) }
             DispatchQueue.main.async {
+                if let series, wanted == self.seriesOf { self.series = series }
                 if let past { self.past = past.0; self.pastSince = past.1 }
                 self.snap = snap
                 self.refreshing = false
                 self.checkAlerts(snap)
             }
+        }
+    }
+
+    /// Sessions are kept in the history by their name.
+    func showSeries(of c: Consumer?) {
+        guard live else { return }
+        seriesOf = c.map { "\($0.kind.rawValue):\($0.name)" }
+        series = []
+        guard let wanted = seriesOf else { return }
+        queue.async {
+            let found = self.history.series(wanted, parts: 48, now: Date())
+            DispatchQueue.main.async { if self.seriesOf == wanted { self.series = found } }
         }
     }
 
@@ -226,10 +262,21 @@ final class Model: ObservableObject {
         settings.planUsage = true
         plan = Demo.plan()
         syncScene()
-        result = OptimizeResult(lines: [
-            .init(text: "Closed: Icon set", ok: true), .init(text: "Closed: Release notes", ok: true),
-            .init(text: "Not closed (the process changed): node server.js", ok: false),
-        ], memBefore: 19 << 30, memAfter: 18 << 30)
+        ports = Demo.ports
+        series = (0..<48).map { (i: Int) -> Double? in i < 3 ? nil : i < 10 || (i > 20 && i < 26) ? 4 : 240 + 200 * sin(Double(i) / 2.3) }
+        func wave(_ base: Double, _ size: Double, _ slow: Double, spike: Int = 0, _ high: Double = 0) -> [Double] {
+            (0..<60).map { (i: Int) -> Double in
+                let top: Double = spike > 0 && i % spike == 0 ? high : 0
+                return base + size * sin(Double(i) / slow) + top
+            }
+        }
+        netRates = wave(300_000, 260_000, 4, spike: 17, 900_000)
+        cpuHistory = wave(0.2, 0.12, 5, spike: 23, 0.3)
+        memHistory = wave(0.56, 0.03, 20)
+        gpuHistory = wave(0.14, 0.1, 3)
+        loadDrivesOnce(demo: true)
+        for r in Demo.receipts() { receipts.add(r) }
+        result = OptimizeResult(receipts: Set(receipts.list.prefix(4).map(\.id)), memBefore: 19 << 30, memAfter: 18 << 30)
     }
 
     /// The last page of the welcome.
@@ -256,7 +303,7 @@ final class Model: ObservableObject {
 
     func syncScene() { scene.areas = HealthArea.allCases.map { health.state(of: $0) } }
 
-    private func changeHealth(_ change: (inout HealthStore) -> Void) {
+    func changeHealth(_ change: (inout HealthStore) -> Void) {
         change(&health)
         if live, writes { health.save() }
         syncScene()
@@ -339,16 +386,22 @@ final class Model: ObservableObject {
         guard live, !cleaning, !items.isEmpty else { return }
         cleaning = true
         notice = nil
+        result = OptimizeResult(cleared: true, running: true)
         let settings = self.settings
         healthQueue.async {
             let table = ProcTable.live()
-            let moved = items.filter { Cleanup.trash($0, table: table, settings: settings) }
+            var moved = Set<String>()
+            let done = items.map { i -> Receipt in
+                let at = Cleanup.trashed(i, table: table, settings: settings)
+                if at != nil { moved.insert(i.path) }
+                return Receipt(at: Date(), title: i.title, detail: at == nil ? "Not moved, in use or changed" : "Moved to the Trash", bytes: i.bytes, ok: at != nil,
+                               back: at.flatMap { $0.isEmpty ? nil : .trash(from: $0, to: i.path) })
+            }
             DispatchQueue.main.async {
                 self.cleaning = false
-                self.changeHealth { s in s.report?.cleanup.removeAll { i in moved.contains { $0.path == i.path } } }
-                let bytes = moved.reduce(0) { $0 + $1.bytes }
-                self.notice = moved.count == items.count ? "\(Fmt.bytes(bytes)) moved. Empty the Trash to free the space."
-                    : "\(moved.count) of \(items.count) moved to the Trash. The rest are in use or changed."
+                self.changeHealth { s in s.report?.cleanup.removeAll { moved.contains($0.path) } }
+                self.changeReceipts { $0.add(done) }
+                self.result = OptimizeResult(receipts: Set(done.map(\.id)), cleared: true)
                 if !moved.isEmpty { self.play([(.burst, 0.45), (.tick, 1.6), (.sphere, 0)]) }
             }
         }
@@ -398,15 +451,11 @@ final class Model: ObservableObject {
 
     // MARK: Optimize. Nothing runs before the user has seen the plan and pressed the button.
 
-    struct ResultLine: Identifiable {
-        let id = UUID()
-        let text: String
-        let ok: Bool
-    }
-
+    /// What the last press of a main button did. The rows themselves are receipts.
     struct OptimizeResult {
-        var lines: [ResultLine]
-        var memBefore: UInt64
+        var receipts: Set<UUID> = []
+        var cleared = false
+        var memBefore: UInt64 = 0
         var memAfter: UInt64?
         /// Shutting a simulator down takes seconds; the page says so meanwhile.
         var running = false
@@ -417,34 +466,53 @@ final class Model: ObservableObject {
         Set((snap?.suggestions ?? []).filter { settings.preselects($0) }.map(\.id))
     }
 
+    func changeReceipts(_ change: (inout Receipts) -> Void) {
+        change(&receipts)
+        if live, writes { receipts.save() }
+    }
+
+    /// For a closed session: the conversation is on disk, and this goes on with it.
+    private func back(ofSession pid: Int32?) -> Receipt.Back? {
+        snap?.sessions.first { $0.pid == pid }.flatMap { $0.sessionId.isEmpty ? nil : .session(cwd: $0.cwd, id: $0.sessionId) }
+    }
+
     func run(_ items: [Suggestion]) {
+        guard live else { return }
         let before = system.memUsedBytes
         let runtimes = snap?.runtimes ?? []
         let settings = self.settings
-        result = OptimizeResult(lines: [], memBefore: before, memAfter: nil, running: true)
+        let backs = Dictionary(items.filter { $0.kind == .idleSession }.map { ($0.id, back(ofSession: $0.pid)) }, uniquingKeysWith: { a, _ in a })
+        result = OptimizeResult(memBefore: before, running: true)
         // Off the main thread: `simctl shutdown` and `adb emu kill` take seconds.
         DispatchQueue.global(qos: .userInitiated).async {
-            var lines: [ResultLine] = []
+            var done: [Receipt] = []
             for s in items {
+                let ok: Bool
+                let said: String
+                var way: Receipt.Back?
                 switch s.kind {
                 case .idleSession:
-                    let ok = s.pid.map { Actions.closeIdleSession(pid: $0) } ?? false
-                    lines.append(ResultLine(text: ok ? "Closed: \(s.title)" : "Not closed (no longer idle): \(s.title)", ok: ok))
+                    ok = s.pid.map { Actions.closeIdleSession(pid: $0) } ?? false
+                    said = ok ? "Session closed" : "Not closed, no longer idle"
+                    way = backs[s.id] ?? nil
                 case .orphan:
-                    let ok = (s.pid != nil && s.procStart != nil) && Actions.terminate(pid: s.pid!, expectedStart: s.procStart!)
-                    lines.append(ResultLine(text: ok ? "Closed: \(s.title)" : "Not closed (the process changed): \(s.title)", ok: ok))
+                    ok = (s.pid != nil && s.procStart != nil) && Actions.terminate(pid: s.pid!, expectedStart: s.procStart!)
+                    said = ok ? "Leftover closed" : "Not closed, the process changed"
                 case .runtime:
-                    let ok = runtimes.first { $0.id == s.runtimeID }.map { Actions.close($0, settings: settings) } ?? false
-                    lines.append(ResultLine(text: ok ? "Shut down: \(s.title)" : "Not shut down (changed, or it failed): \(s.title)", ok: ok))
+                    ok = runtimes.first { $0.id == s.runtimeID }.map { Actions.close($0, settings: settings) } ?? false
+                    said = ok ? "Shut down" : "Not shut down, it changed or failed"
                 case .heavyApp:
-                    let ok = DispatchQueue.main.sync { self.quitApp(at: s.bundlePath) }
-                    lines.append(ResultLine(text: ok ? "Asked to quit: \(s.title)" : "Not found: \(s.title)", ok: ok))
+                    ok = DispatchQueue.main.sync { self.quitApp(at: s.bundlePath) }
+                    said = ok ? "Asked to quit" : "Not found"
+                    way = s.bundlePath.map { .app(path: $0) }
                 case .advice:
-                    break
+                    continue
                 }
+                done.append(Receipt(at: Date(), title: s.title, detail: said, bytes: s.reclaimBytes, ok: ok, back: ok ? way : nil))
             }
             DispatchQueue.main.async {
-                self.result = OptimizeResult(lines: lines, memBefore: before, memAfter: nil)
+                self.changeReceipts { $0.add(done) }
+                self.result = OptimizeResult(receipts: Set(done.map(\.id)), memBefore: before)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
                     self.result?.memAfter = self.system.memUsedBytes
                     self.refreshSnapshot()
@@ -474,6 +542,7 @@ final class Model: ObservableObject {
             DispatchQueue.global(qos: .userInitiated).async {
                 let ok = Actions.close(r, settings: settings)
                 DispatchQueue.main.async {
+                    self.changeReceipts { $0.add(Receipt(at: Date(), title: c.name, detail: ok ? "Shut down" : "Not shut down", bytes: c.rssBytes, ok: ok)) }
                     self.notice = ok ? "Shut down: \(c.name)" : "Not shut down: \(c.name) (changed, or it failed)"
                     self.refreshSnapshot()
                 }
@@ -482,10 +551,13 @@ final class Model: ObservableObject {
         }
         if c.kind == .app, quitApp(at: c.bundlePath) {
             notice = "Asked to quit: \(c.name)"
+            changeReceipts { $0.add(Receipt(at: Date(), title: c.name, detail: "Asked to quit", bytes: c.rssBytes, back: c.bundlePath.map { .app(path: $0) })) }
         } else {
+            let way = c.kind == .session ? back(ofSession: c.members.first?.pid) : nil
             let n = Actions.close(c, settings: settings)
             notice = n == 0 ? "Not closed: \(c.name) (no permission, or it changed)"
                 : n == 1 ? "Closed: \(c.name)" : "Closed \(n) processes of \(c.name)"
+            changeReceipts { $0.add(Receipt(at: Date(), title: c.name, detail: n == 0 ? "Not closed" : "Closed", bytes: c.rssBytes, ok: n > 0, back: n > 0 ? way : nil)) }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { self.refreshSnapshot() }
     }
@@ -548,6 +620,26 @@ final class Model: ObservableObject {
             let last = Charge.read() == nil ? nil : SleepCost.load().last(now: Date())
             DispatchQueue.main.async { self.lastSleep = last }
         }
+    }
+
+    /// Reading the ports takes a twentieth of a second, off the main thread.
+    func refreshPorts() {
+        guard live else { return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let found = Ports.read()
+            DispatchQueue.main.async { self.ports = found ?? self.ports ?? [] }
+        }
+    }
+
+    /// One of the page's choices while it is on.
+    var awakeHours: Double { awakeUntil == nil ? 0 : chosenHours }
+
+    func keepAwake(hours: Double) {
+        guard live else { return }
+        chosenHours = hours
+        if hours == 0 { awake.stop() } else if !awake.start(hours * 3600) { notice = "macOS refused" }
+        awakeUntil = awake.until
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.refreshSnapshot() }
     }
 
     func connectDrives() { driveGuard?.connectNow() }
@@ -634,6 +726,27 @@ enum Fmt {
     }
 
     static func degrees(_ c: Double) -> String { String(format: "%.0f°C", c) }
+
+    /// No decimals from ten up: for a narrow cell.
+    static func short(_ b: UInt64) -> String {
+        let gb = Double(b) / 1_073_741_824
+        return gb >= 10 ? String(format: "%.0f GB", gb) : bytes(b)
+    }
+
+    static func rate(_ b: Double) -> String {
+        b >= 1e6 ? String(format: "%.1f MB/s", b / 1e6) : String(format: "%.0f KB/s", b / 1e3)
+    }
+
+    static func ago(_ d: Date) -> String {
+        let s = Date().timeIntervalSince(d)
+        return s < 60 ? "just now" : duration(s) + " ago"
+    }
+
+    static func clock(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "HH:mm"
+        return f.string(from: d)
+    }
 
     static func duration(_ s: TimeInterval) -> String {
         let m = Int(s / 60)
