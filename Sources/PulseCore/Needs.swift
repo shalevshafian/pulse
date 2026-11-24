@@ -83,7 +83,6 @@ public enum Needs {
 
     static func verb(_ f: HealthFix) -> String {
         switch f {
-        case .timeMachine: return "Set up"
         case .cleanup: return "Choose"
         case .acceptStartup, .sleep: return "Look"
         case .plan: return "Optimize"

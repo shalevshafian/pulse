@@ -39,7 +39,7 @@ struct ActivityPage: View {
                 }
             }
         }
-        .frame(maxHeight: .infinity)
+        .scrollFade()
         .tile()
         .task(id: ui.sort) { if ui.sort == .ports { model.refreshPorts() } }
         Text(model.notice ?? note(all.count)).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(2)
@@ -177,8 +177,8 @@ struct ProcessPage: View {
                     actions(c)
                 }
             }
-            .frame(maxHeight: .infinity)
-            if let notice = model.notice { NoticeLine(text: notice) }
+            .scrollFade()
+            Text(model.notice ?? consequence(c)).font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
             closeButton(c)
         } else {
             Text("It ended, or its name changed.").font(.system(size: 12)).foregroundStyle(.secondary).tile()
@@ -193,7 +193,7 @@ struct ProcessPage: View {
                 line("Copy the command that resumes it", icon: "doc.on.doc") { Model.copy(command); model.notice = "Copied" }
                 Hairline()
             }
-            if let path = c.bundlePath { line("Show in Finder", icon: "arrow.up.right") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)]) }; Hairline() }
+            if let path = c.bundlePath ?? c.program { line("Show in Finder", icon: "arrow.up.right") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)]) }; Hairline() }
             Check(title: "Never close this", isOn: Binding(get: { model.settings.isProtected(c.name) }, set: { model.protect(c.name, $0) }))
         }
         .tile()
@@ -201,12 +201,31 @@ struct ProcessPage: View {
         .onDisappear { model.showSeries(of: nil) }
     }
 
+    private func verb(_ c: Consumer) -> String {
+        switch c.kind {
+        case .app: return "Quit \(c.name)"
+        case .runtime: return "Shut down"
+        case .session: return "Stop session"
+        case .process: return c.processCount > 1 ? "Stop \(c.processCount) processes" : "Stop it"
+        }
+    }
+
+    /// Said before the press, not after.
+    private func consequence(_ c: Consumer) -> String {
+        guard model.mayClose(c) else { return "macOS needs it, or your rules protect it. Pulse will not close it." }
+        switch c.kind {
+        case .app: return "It is asked to quit, as if you did it, and may ask you to save."
+        case .runtime: return "Shut down with its own tool. Its data stays."
+        case .session: return "Stops its process. The conversation stays on disk and can be resumed."
+        case .process: return "Asked to stop. What it was in the middle of is lost, and Pulse cannot start it again."
+        }
+    }
+
     @ViewBuilder private func closeButton(_ c: Consumer) -> some View {
         let allowed = model.mayClose(c), armed = ui.armed == "page:" + c.id
-        let verb = c.kind == .app ? "Quit" : c.kind == .runtime ? "Shut down" : c.kind == .session ? "Stop session" : "Close"
         Button { if armed { ui.disarm(); model.close(c) } else { ui.arm("page:" + c.id) } } label: {
             HStack {
-                Text(!allowed ? "Protected" : armed ? (model.warning(closing: c).map { $0 + ". " } ?? "") + "Press again" : verb).font(.system(size: 13, weight: .semibold))
+                Text(!allowed ? "Protected" : armed ? (model.warning(closing: c).map { $0 + ". " } ?? "") + "Press again" : verb(c)).lineLimit(1).font(.system(size: 13, weight: .semibold))
                 Spacer()
                 Text(Fmt.bytes(c.rssBytes)).font(.system(size: 12, design: .monospaced))
             }
@@ -237,7 +256,7 @@ private struct BusyTile: View {
                 }
                 .frame(height: g.size.height, alignment: .bottom)
             }
-            .frame(height: 34)
+            .frame(height: 24)
             HStack {
                 Text("12 h ago")
                 Spacer()
@@ -278,8 +297,14 @@ struct SessionsPage: View {
                 VStack(spacing: 6) {
                     ForEach(list) { session in
                         let consumer = model.snap?.consumers.first { $0.kind == .session && $0.members.first?.pid == session.pid }
-                        SessionRow(session: session, open: { if session.isWaiting { model.showHost(of: session) } else { (consumer?.id).map(ui.openRow) } }) {
-                            if let c = consumer {
+                        SessionRow(session: session, open: { (consumer?.id).map(ui.openRow) }) {
+                            if session.isWaiting {
+                                Button { model.showHost(of: session) } label: { Text("Open").font(.system(size: 10, weight: .semibold)).fixedSize().pill() }
+                                    .buttonStyle(PressStyle()).help("Bring the app it runs in to the front")
+                            } else if !session.isIdle {
+                                // A working one is stopped from its own page only.
+                                Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary).frame(width: 20)
+                            } else if let c = consumer {
                                 CloseControl(armed: ui.armed == c.id, allowed: model.mayClose(c), warning: model.warning(closing: c),
                                              arm: { ui.arm(c.id) }, fire: { ui.disarm(); model.close(c) })
                             }
@@ -287,7 +312,7 @@ struct SessionsPage: View {
                     }
                 }
             }
-            .frame(maxHeight: .infinity)
+            .scrollFade()
             .tile()
         }
         Spacer(minLength: 0)

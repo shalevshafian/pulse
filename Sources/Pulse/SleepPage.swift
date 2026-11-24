@@ -39,7 +39,7 @@ struct SleepPage: View {
                 }
             }
         }
-        .frame(maxHeight: .infinity)
+        .scrollFade()
         Text("While its display is on the Mac stays awake anyway. That is not listed, and neither is a mounted drive.")
             .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
             .onAppear { model.refreshSleep() }

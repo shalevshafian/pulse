@@ -10,8 +10,7 @@ struct NowPage: View {
     var body: some View {
         let needs = model.needs
         hero(needs)
-        areas.padding(.top, 2)
-        Hairline()
+        Hairline().padding(.top, 2)
         figures
         Hairline()
         if let notice = model.notice {
@@ -32,7 +31,7 @@ struct NowPage: View {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 2) {
                     ForEach(needs) { n in
-                        NeedRow(need: n, open: { act(n, direct: false) }, press: { act(n, direct: true) }, later: n.id == "memory" || n.id == "heat" ? nil : { model.hide(n) })
+                        NeedRow(need: n, open: { act(n, direct: false) }, press: { act(n, direct: true) }, later: n.id == "memory" || n.id == "heat" ? nil : { model.hide(n) }) { focus(n, $0) }
                             .transition(.asymmetric(insertion: .opacity, removal: .move(edge: .leading).combined(with: .opacity)))
                     }
                     if needs.count < 3 {
@@ -41,7 +40,7 @@ struct NowPage: View {
                     }
                 }
             }
-            .frame(maxHeight: .infinity)
+            .scrollFade()
         }
     }
 
@@ -69,6 +68,12 @@ struct NowPage: View {
         }
     }
 
+    /// The body turns the part a finding belongs to.
+    private func focus(_ n: Need, _ inside: Bool) {
+        let area = model.health.problems.first { n.place == .health && $0.id == n.ref }?.area
+        model.scene.setFocus(inside ? area.flatMap { HealthArea.allCases.firstIndex(of: $0) } : nil, at: Model.clock)
+    }
+
     // MARK: The body
 
     private func hero(_ needs: [Need]) -> some View {
@@ -78,6 +83,7 @@ struct NowPage: View {
                     Text(model.health.score.map(String.init) ?? "–").font(.system(size: 46, weight: .semibold)).monospacedDigit().tracking(-1.5)
                         .contentTransition(.numericText())
                         .animation(.spring(response: 0.6, dampingFraction: 0.8), value: model.health.score)
+                    if model.health.score != nil { Text("/100").font(.system(size: 11)).foregroundStyle(.secondary) }
                     if let change = model.health.weekChange(now: Date()), change != 0 {
                         Text((change > 0 ? "+" : "") + "\(change)").font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
                             .help("Against a week ago")
@@ -125,24 +131,15 @@ struct NowPage: View {
         .help(closes ? "See what can be closed. Nothing is closed before you confirm." : "Check the health of this Mac")
     }
 
-    private var areas: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(HealthArea.allCases.enumerated()), id: \.element) { i, area in
-                AreaMark(title: area.title, state: model.health.state(of: area)) { inside in
-                    model.scene.setFocus(inside ? i : nil, at: Model.clock)
-                } action: { ui.go(.health) }
-            }
-        }
-    }
-
     private var figures: some View {
         let s = model.system
         return HStack(spacing: 0) {
             Button { ui.activity(.cpu) } label: { Metric("CPU", String(format: "%.0f%%", s.cpuPercent), hot: s.cpuPercent >= 85) }.buttonStyle(PressStyle())
             Button { ui.activity(.memory) } label: { Metric("Memory", String(format: "%.0f%%", s.memPercent), hot: s.memPressureLevel >= 2) }.buttonStyle(PressStyle())
+                .help("\(Fmt.bytes(s.memUsedBytes)) of \(Fmt.bytes(s.memTotalBytes)). Pressure \(s.memPressureLevel >= 4 ? "critical" : s.memPressureLevel >= 2 ? "high" : "normal"), swap \(Fmt.bytes(s.swapUsedBytes))")
             // An Intel Mac has no readable sensor.
             if let t = s.chipTempC {
-                Button { ui.activity(.hours) } label: { Metric("Heat", String(format: "%.0f°", t), hot: s.thermal == "serious" || s.thermal == "critical") }.buttonStyle(PressStyle())
+                Button { ui.activity(.hours) } label: { Metric("Chip heat", String(format: "%.0f°", t), hot: s.thermal == "serious" || s.thermal == "critical") }.buttonStyle(PressStyle())
             } else if let g = s.gpuPercent {
                 Button { ui.activity(.cpu) } label: { Metric("GPU", String(format: "%.0f%%", g), hot: false) }.buttonStyle(PressStyle())
             }
@@ -170,6 +167,7 @@ private struct NeedRow: View {
     let open: () -> Void
     let press: () -> Void
     let later: (() -> Void)?
+    let hover: (Bool) -> Void
     @State private var inside = false
 
     var body: some View {
@@ -193,16 +191,12 @@ private struct NeedRow: View {
                 .buttonStyle(.plain).help("Back tomorrow, if it is still so")
             }
             Button(action: press) {
-                Text(need.verb).font(.system(size: 10, weight: .semibold)).foregroundStyle(need.level == .know ? Color.primary : Ink.base).fixedSize()
-                    .padding(.horizontal, 9).frame(height: 20)
-                    .background(need.level == .know ? Color.clear : Ink.ink(.dark), in: Capsule())
-                    .overlay(Capsule().strokeBorder(.white.opacity(need.level == .know ? 0.25 : 0)))
-                    .contentShape(Capsule())
+                Text(need.verb).font(.system(size: 10, weight: .semibold)).fixedSize().pill()
             }
             .buttonStyle(PressStyle())
         }
         .frame(height: 38)
-        .onHover { inside = $0 }
+        .onHover { inside = $0; hover($0) }
         .help(need.title + (need.detail.isEmpty ? "" : "\n" + need.detail))
         .contextMenu { if let later { Button("Not today", action: later) } }
         .accessibilityElement(children: .contain)

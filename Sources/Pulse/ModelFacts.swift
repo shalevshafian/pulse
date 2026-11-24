@@ -72,7 +72,7 @@ extension Model {
         if let p = past.first(where: { $0.kind == c.kind && $0.name == c.name }) {
             out.append(("Last 12 hours", Past.cpu(p.cpuSeconds) + (p.peakBytes > 0 ? ", up to \(Fmt.bytes(p.peakBytes))" : "")))
         }
-        if c.processCount > 1 { out.append(("Processes", "\(c.processCount)")) }
+        if c.processCount > 1 { out.append(("Processes", "\(c.processCount)")) } else if let p = c.members.first?.pid { out.append(("PID", "\(p)")) }
         if let first = c.members.compactMap({ StartTime.date($0.lstart) }).min() { out.append(("Started", Fmt.duration(now.timeIntervalSince(first)) + " ago")) }
         if let h = snap?.awake?.first(where: { $0.kind == c.kind && $0.name == c.name }) {
             out.append(("Keeps the Mac awake", h.since.map { Fmt.duration(now.timeIntervalSince($0)) } ?? "yes"))
@@ -84,7 +84,7 @@ extension Model {
         }
         if let s = session(of: c) { out.append(("Folder", (s.cwd as NSString).abbreviatingWithTildeInPath)) }
         if let r = snap?.runtimes.first(where: { $0.id == c.runtimeID }) { out.append(("Up for", Fmt.duration(r.upSeconds))) }
-        if let path = c.bundlePath { out.append(("Where", (path as NSString).abbreviatingWithTildeInPath)) }
+        if let path = c.program ?? c.bundlePath { out.append(("Where", (path as NSString).abbreviatingWithTildeInPath)) }
         return out.map { (name: $0.0, value: $0.1) }
     }
 

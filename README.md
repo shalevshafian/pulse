@@ -1,28 +1,33 @@
 # Pulse
 
-A small menu bar app for the load and the health of a Mac. One panel, one button that says
-what it will do before it does it.
+A small menu bar app that answers one question: is there anything on this Mac that needs you?
+What does comes first, with the one place where it is dealt with. The rest is a press away.
 
 <p>
-  <img src="docs/images/overview.png" width="240" alt="The main page: health score, load, and the optimize button">
-  <img src="docs/images/health.png" width="240" alt="Mac health: what needs care, and what is fine">
+  <img src="docs/images/overview.png" width="240" alt="Now: the score, four figures, and what needs you">
+  <img src="docs/images/processes.png" width="240" alt="Activity: live meters and every row">
+  <img src="docs/images/process.png" width="240" alt="One program: what it is, what it costs, when it was busy">
+</p>
+<p>
   <img src="docs/images/plan.png" width="240" alt="The plan: every row Optimize would close, ticked or not">
+  <img src="docs/images/done.png" width="240" alt="What was done, with the way back beside it">
+  <img src="docs/images/care.png" width="240" alt="Care: every area says how it is before it is opened">
 </p>
 
-## What it does
+## Five places
 
-- **Load.** CPU, memory, heat, and every process, grouped by app, each with its own close control.
-- **Optimize.** Shows a plan first. Closes only what is ticked, and reports what happened.
-- **The last twelve hours.** CPU time and peak memory of each row, counted while Pulse runs.
-- **Health.** Backup, safety, updates, disk wear, battery, crashes, speed and startup items (those inside apps too), every six hours, as one score.
-- **Cleanup.** Build and download caches that come back by themselves. To the Trash, never ticked in advance.
-  Under them, the largest folders of your Library, to look at only.
-- **Drives in sleep.** A drive you tick is unmounted before the Mac sleeps and mounted when it wakes.
-- **Sleep.** What keeps the Mac awake, and what the last sleep cost.
-- **Claude Code sessions**, when Claude Code is installed: which wait for you, which work, which are idle, what each one holds.
-  On request, how much of the plan is used.
-- **Simulators, emulators and build daemons**, each as one row, shut down with their own tools.
-- **For agents.** A read-only MCP server.
+- **Now.** A score, four figures, and one list: sessions that wait, pressure, heat, findings, space. The costliest first, "Not today" for what can wait.
+- **Activity.** Live CPU, memory, graphics and network. Every row now, over the last twelve hours, or by its open port.
+  A row has a page: what it is, what it costs, when it was busy, what it listens on, and what closing it would lose.
+- **Claude**, when Claude Code is installed. Sessions that wait for you, work or idle; on request, how much of the plan is used.
+- **Care.** Health every six hours, cleanup, disk and its wear, sleep, drives, battery, startup items and who signed them, and the history of what Pulse did.
+- **Settings.** What the menu bar shows, silent alerts, rules, a shortcut key.
+
+How it acts is the same everywhere: looking takes one press, closing takes two, the Trash takes a tick and a confirm.
+What has a way back has it beside it: open the app again, resume the session, put the folder back.
+
+Also: drives you tick are unmounted before sleep and mounted after; the Mac can be kept awake for some hours; simulators,
+emulators and build daemons are shut down with their own tools; agents get a read-only MCP server. Command-1 to 5 move between the places.
 
 ## Install
 
@@ -46,8 +51,8 @@ cd pulse
 Pulse has no network code, no telemetry and no accounts. It asks for no administrator rights.
 It reads the process table, the sensors, the state of macOS's own tools and, if it exists,
 `~/.claude/sessions`, where it opens only the `<pid>.json` records. What it keeps is in
-`~/Library/Application Support/Pulse`: settings, health, the last sleeps, and the names and CPU time of
-the last twelve hours.
+`~/Library/Application Support/Pulse`: settings, health, the last sleeps, the last hundred
+things you had it close or clear, and the names and CPU time of the last twelve hours.
 
 Plan usage is off until you tick it. Then Pulse also reads `~/.claude.json`, which holds your account too, and
 takes only the limits from it, and the end of recent files in `~/.codex/sessions`, only the lines with limits.
@@ -86,6 +91,8 @@ Or, for any client that takes a configuration file:
 | `sleep_blockers` | What keeps the Mac awake, and the last sleeps |
 | `dev_runtimes` | Booted simulators, emulators, build daemons |
 | `optimize_suggestions` | What could be closed. The user closes it, in the panel |
+| `needs_attention` | What deserves attention now, the costliest first |
+| `open_ports` | Which program listens where, and whether the network can reach it |
 | `health_report` | The last health check |
 | `plan_usage` | Claude and Codex limits, only when ticked in Settings |
 

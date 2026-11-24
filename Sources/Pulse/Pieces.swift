@@ -68,34 +68,22 @@ struct IconButton: View {
     }
 }
 
-/// An area of health under the body: a capsule that is short and pale when fine, and
-/// stands up when something needs care.
+/// An area of health: a capsule that is short and pale when fine, and stands up when something needs care.
 struct AreaMark: View {
     let title: String
     let state: HealthState
-    let hover: (Bool) -> Void
-    let action: () -> Void
-    @State private var inside = false
 
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Capsule()
-                    .fill(state == .urgent ? Ink.hot : Ink.ink(.dark).opacity(state == .attention ? 1 : state == .unknown ? 0.16 : 0.42))
-                    .frame(width: 5, height: inside ? 18 : state == .urgent || state == .attention ? 14 : 5)
-                    .frame(height: 18, alignment: .bottom)
-                Text(title).font(.system(size: 9)).lineLimit(1).fixedSize()
-                    .opacity(inside || state == .urgent || state == .attention ? 1 : 0.55)
-            }
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
+        let up = state == .urgent || state == .attention
+        VStack(spacing: 4) {
+            Capsule()
+                .fill(state == .urgent ? Ink.hot : Ink.ink(.dark).opacity(state == .attention ? 1 : state == .unknown ? 0.16 : 0.42))
+                .frame(width: 5, height: up ? 14 : 5)
+                .frame(height: 14, alignment: .bottom)
+            Text(title).font(.system(size: 8.5)).lineLimit(1).fixedSize().opacity(up ? 1 : 0.6)
         }
-        .buttonStyle(.plain)
-        .onHover { h in
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.6)) { inside = h }
-            hover(h)
-        }
-        .accessibilityLabel(title)
+        .frame(maxWidth: .infinity)
+        .accessibilityElement().accessibilityLabel("\(title): \(state.rawValue)")
     }
 }
 
@@ -141,10 +129,10 @@ struct CleanRow: View {
     var body: some View {
         HStack(spacing: 6) {
             Check(title: item.title, isOn: $isOn)
-            if item.blockedBy != nil { Image(systemName: "lock").font(.system(size: 9)).foregroundStyle(.tertiary) }
+            if item.blockedBy != nil { Image(systemName: "lock").font(.system(size: 9)).foregroundStyle(.secondary) }
             Text(Fmt.bytes(item.bytes)).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
         }
-        .opacity(item.blockedBy == nil ? 1 : 0.55)
+        .opacity(item.blockedBy == nil ? 1 : 0.7)
         .disabled(item.blockedBy != nil)
         .overlay(alignment: .bottomLeading) {
             Text(item.blockedBy.map { "In use now: \($0)" } ?? item.detail)
@@ -303,7 +291,7 @@ struct CloseControl: View {
 
     var body: some View {
         if !allowed {
-            Image(systemName: "lock").font(.system(size: 9)).foregroundStyle(.tertiary).frame(width: 20, height: 20)
+            Image(systemName: "lock").font(.system(size: 9)).foregroundStyle(.secondary).frame(width: 20, height: 20)
         } else if armed {
             Button(action: fire) {
                 Text(warning.map { "\($0) · Close?" } ?? "Close?")
@@ -337,7 +325,7 @@ struct Check: View {
             HStack(spacing: 9) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 5, style: .continuous).fill(isOn ? Color.primary : .clear)
-                    RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(isOn ? Color.primary : Color.primary.opacity(0.3), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(isOn ? Color.primary : Color.primary.opacity(0.5), lineWidth: 1)
                     if isOn {
                         Image(systemName: "checkmark").font(.system(size: 8, weight: .bold)).foregroundStyle(Ink.base)
                     }
@@ -369,12 +357,28 @@ struct Choice: View {
                         .foregroundStyle(value == option ? Ink.base : Color.secondary)
                         .padding(.horizontal, 7).frame(height: 21)
                         .background(value == option ? Color.primary : .clear, in: Capsule())
-                        .overlay(Capsule().strokeBorder(value == option ? .clear : Ink.line(scheme)))
+                        .overlay(Capsule(style: .circular).strokeBorder(value == option ? .clear : .white.opacity(0.2)))
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
         }
+    }
+}
+
+extension View {
+    /// The outline of a small button. White fills belong to a page's one main button.
+    func pill() -> some View {
+        padding(.horizontal, 9).frame(height: 20)
+            .background(Capsule(style: .circular).strokeBorder(.white.opacity(0.28), lineWidth: 1))
+            .contentShape(Capsule())
+    }
+
+    /// Every list that goes on past its edge fades there, instead of being cut.
+    func scrollFade() -> some View {
+        contentMargins(.bottom, 18, for: .scrollContent)
+            .frame(maxHeight: .infinity)
+            .mask(VStack(spacing: 0) { Rectangle(); LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 18) })
     }
 }
 
@@ -389,13 +393,13 @@ struct MainButton: View {
         Button(action: action) {
             HStack {
                 if value == nil { Spacer() }
-                Text(title).font(.system(size: 13, weight: .semibold))
-                Spacer()
+                Text(title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                Spacer(minLength: 8)
                 if let value { Text(value).font(.system(size: 12, design: .monospaced)) }
             }
             .foregroundStyle(Ink.base)
             .padding(.horizontal, 18).frame(height: 38)
-            .background(Ink.ink(.dark).opacity(on ? 1 : 0.35), in: Capsule())
+            .background(Ink.ink(.dark).opacity(on ? 1 : 0.5), in: Capsule())
             .contentShape(Capsule())
         }
         .buttonStyle(PressStyle()).disabled(!on)
@@ -429,7 +433,7 @@ struct PageHeader: View {
             }
             Text(title).font(.system(size: 14, weight: .semibold)).lineLimit(1)
             if let count {
-                Text("[\(count)]").font(.system(size: 14, design: .monospaced)).foregroundStyle(.tertiary)
+                Text("[\(count)]").font(.system(size: 14, design: .monospaced)).foregroundStyle(.secondary)
             }
             Spacer()
         }
@@ -454,7 +458,7 @@ struct SessionRow<Trailing: View>: View {
     var body: some View {
         HStack(spacing: 8) {
             Button(action: open) { row.contentShape(Rectangle()) }
-                .buttonStyle(.plain).help("Bring the app it runs in to the front")
+                .buttonStyle(.plain).help("What it is, and what can be done")
             trailing()
         }
         .frame(height: 32)
@@ -474,7 +478,7 @@ struct SessionRow<Trailing: View>: View {
                     .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 6)
-            Text(Fmt.bytes(session.rssBytes)).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
+            if !session.isWaiting { Text(Fmt.bytes(session.rssBytes)).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary) }
         }
     }
 }

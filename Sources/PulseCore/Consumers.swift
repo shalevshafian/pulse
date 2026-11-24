@@ -14,6 +14,8 @@ public struct Consumer: Codable, Sendable, Identifiable {
     /// group, or only the root of a session. Each with its start time, against pid reuse.
     public var members: [ProcRef] = []
     public var bundlePath: String? = nil
+    /// Where the program is, when its row is one program. Not sent to agents.
+    public var program: String? = nil
     /// Set for a simulator, emulator or build daemon: closing goes through its own shutdown.
     public var runtimeID: String? = nil
     /// Every process of the row with its CPU time. Not sent to agents.
@@ -68,6 +70,7 @@ public enum Consumers {
             var c = groups[key] ?? Consumer(kind: kind, name: name, rssBytes: 0, cpuPercent: 0, processCount: 0, bundlePath: bundlePath)
             c.members.append(ProcRef(pid: p.pid, lstart: p.lstart))
             if let t = time(p) { c.times.append(t) }
+            if kind == .process, p.program.hasPrefix("/") { c.program = c.processCount == 0 || c.program == p.program ? p.program : nil }
             c.rssBytes += p.rssBytes
             c.cpuPercent += p.cpu / n
             c.processCount += 1

@@ -11,7 +11,7 @@ struct PlanPage: View {
         let chosen = actionable.filter { ui.selected.contains($0.id) }
         let bytes = chosen.reduce(0) { $0 + $1.reclaimBytes }
         PageHeader(title: "What Optimize will do") { ui.back() }
-        Text(!model.hasClaude ? "Only ticked rows are closed. An app is asked to quit, as if you quit it yourself." : "Only ticked rows are closed. A working session is never closed, nor is an app that runs sessions. A closed session can be resumed.")
+        Text(!model.hasClaude ? "Only ticked rows are closed. An app is asked to quit, as if you quit it yourself." : "Only ticked rows are closed. A working session is never closed, and a closed one can be resumed.")
             .font(.system(size: 11)).foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
         ForEach((model.snap?.suggestions ?? []).filter { $0.kind == .advice }) { a in
@@ -24,22 +24,43 @@ struct PlanPage: View {
             Spacer(minLength: 0)
         } else {
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 0) {
-                    ForEach(actionable) { s in
-                        PlanRow(suggestion: s, isOn: Binding(
-                            get: { ui.selected.contains(s.id) },
-                            set: { if $0 { ui.selected.insert(s.id) } else { ui.selected.remove(s.id) } }))
-                    }
+                VStack(spacing: gap) {
+                    group("By your rules", actionable.filter { model.settings.preselects($0) })
+                    group("Your choice", actionable.filter { !model.settings.preselects($0) })
                 }
-                .tile()
             }
-            .frame(maxHeight: .infinity)
-            MainButton(title: chosen.isEmpty ? "Nothing selected" : "Close \(Plural.count(chosen.count, "row"))", value: chosen.isEmpty ? nil : Fmt.bytes(bytes) + " in use", on: !chosen.isEmpty) {
+            .scrollFade()
+            MainButton(title: chosen.isEmpty ? "Nothing selected" : what(chosen), value: chosen.isEmpty ? nil : Fmt.bytes(bytes), on: !chosen.isEmpty) {
                 model.run(chosen)
                 ui.replace(with: .done)
             }
             .help("What these hold now, compressed memory included. Closing them gives back at most that.")
         }
+    }
+}
+
+extension PlanPage {
+    @ViewBuilder private func group(_ title: String, _ list: [Suggestion]) -> some View {
+        if !list.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                TileLabel(title)
+                VStack(spacing: 0) {
+                    ForEach(list) { s in
+                        PlanRow(suggestion: s, isOn: Binding(
+                            get: { ui.selected.contains(s.id) },
+                            set: { if $0 { ui.selected.insert(s.id) } else { ui.selected.remove(s.id) } }))
+                    }
+                }
+            }
+            .tile()
+        }
+    }
+
+    /// The result, in words, before it happens.
+    private func what(_ chosen: [Suggestion]) -> String {
+        let sessions = chosen.filter { $0.kind == .idleSession }.count, rest = chosen.count - sessions
+        if sessions == 0 { return rest == 1 ? "Close \(chosen[0].title)" : "Close \(rest) things" }
+        return "Close \(Plural.count(sessions, "session"))" + (rest > 0 ? ", \(rest) more" : "")
     }
 }
 
@@ -61,7 +82,8 @@ struct DonePage: View {
                 if r?.cleared == true {
                     Text("\(Fmt.bytes(done.filter(\.ok).reduce(0) { $0 + $1.bytes })) in the Trash. Empty the Trash to free the space.").font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 } else if let r, let after = r.memAfter {
-                    Text("Memory in use: \(Fmt.bytes(r.memBefore)) before, \(Fmt.bytes(after)) after").font(.system(size: 11)).foregroundStyle(.secondary)
+                    // Other programs take and give memory at the same time: the difference is a fact, not a promise kept.
+                    Text("\(Fmt.bytes(r.memBefore)) in use before, \(Fmt.bytes(after)) now").font(.system(size: 11)).foregroundStyle(.secondary)
                 } else {
                     Text("Measuring memory…").font(.system(size: 11)).foregroundStyle(.secondary)
                 }
@@ -72,10 +94,10 @@ struct DonePage: View {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 8) { ForEach(done) { ReceiptRow(model: model, receipt: $0, dated: false) } }.tile()
             }
-            .frame(maxHeight: .infinity)
+            .scrollFade()
         }
         Spacer(minLength: 0)
         if let notice = model.notice { NoticeLine(text: notice) }
-        line("Everything Pulse did", icon: "chevron.right") { ui.go(.history) }.foregroundStyle(.secondary).padding(.horizontal, 4)
+        line("History", icon: "chevron.right") { ui.go(.history) }.foregroundStyle(.secondary).padding(.horizontal, 4)
     }
 }

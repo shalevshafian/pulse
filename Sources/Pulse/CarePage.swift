@@ -46,16 +46,22 @@ struct CarePage: View {
         let ticked = model.settings.sleepDrives.count
         let startup = h.report?.startup ?? []
         return [
-            Row(icon: "stethoscope", title: "Health", state: h.report == nil ? "Not checked yet" : problems.isEmpty ? "Nothing to fix" : "\(problems.count) to fix: \(problems[0].title)", page: .health,
+            Row(icon: "waveform.path.ecg", title: "Health", state: h.report == nil ? "Not checked yet" : problems.isEmpty ? "Nothing to fix" : "\(problems.count) to fix: \(problems[0].title)", page: .health,
                 mark: problems.contains { $0.state == .urgent } ? .urgent : problems.isEmpty ? .ok : .attention),
             Row(icon: "shippingbox", title: "Cleanup", state: free.isEmpty ? "Nothing to clear" : "\(Fmt.bytes(free.reduce(0) { $0 + $1.bytes })) in \(Plural.count(free.count, "place"))", page: .cleanup),
             Row(icon: "internaldrive", title: "Disk", state: "\(Fmt.drive(s.diskFreeBytes)) free of \(Fmt.drive(s.diskTotalBytes))" + (h.report?.wear.map { ", wear \($0)%" } ?? ""), page: .disk, mark: h.state(of: .storage) == .urgent ? .urgent : .ok),
             Row(icon: "moon", title: "Sleep", state: awake.map { a in a.first.map { "Awake because of \($0.name)" + (a.count > 1 ? " and \(a.count - 1) more" : "") } ?? "Nothing keeps it awake" } ?? "What keeps it awake", page: .sleep),
             Row(icon: "externaldrive", title: "Drives in sleep", state: model.drivesOut.isEmpty ? (ticked == 0 ? "None is disconnected" : "\(Plural.count(ticked, "drive")) disconnected before sleep") : "\(model.drivesOut.count) still disconnected", page: .drives,
                 mark: model.drivesOut.isEmpty ? .ok : .attention),
+            Row(icon: "battery.75percent", title: "Battery", state: battery, page: .health, mark: h.state(of: .battery) == .ok || h.state(of: .battery) == .unknown ? .ok : .attention),
             Row(icon: "power", title: "Startup", state: first(.startup)?.title ?? (startup.isEmpty ? "Not checked yet" : Plural.count(startup.count, "item")), page: .startup, mark: h.state(of: .startup) == .attention ? .attention : .ok),
-            Row(icon: "clock.arrow.circlepath", title: "What Pulse did", state: model.receipts.list.first.map { "\($0.title), \(Fmt.ago($0.at))" } ?? "Nothing yet", page: .history),
+            Row(icon: "clock.arrow.circlepath", title: "History", state: model.receipts.list.first.map { "\($0.title), \(Fmt.ago($0.at))" } ?? "Nothing yet", page: .history),
         ]
+    }
+
+    private var battery: String {
+        guard let c = (model.health.report?.checks ?? []).first(where: { $0.area == .battery }) else { return "Not checked yet" }
+        return c.title.replacingOccurrences(of: "Battery health ", with: "Health ") + (c.detail.isEmpty ? "" : ", " + c.detail)
     }
 
     private struct CareRow: View {
@@ -75,7 +81,7 @@ struct CarePage: View {
                     if row.mark == .attention || row.mark == .urgent { Capsule().fill(row.mark == .urgent ? Ink.hot : Ink.ink(.dark)).frame(width: 3, height: 14) }
                     Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 11).frame(height: 43)
+                .padding(.horizontal, 11).frame(height: 39)
                 .contentShape(Rectangle())
             }
             .buttonStyle(PressStyle()).onHover { inside = $0 }
@@ -106,7 +112,11 @@ struct HealthPage: View {
         let checks = model.health.report?.checks ?? []
         let ignored = checks.filter { $0.isProblem && model.health.ignored.contains($0.id) }
         let good = checks.filter { $0.state == .ok }
-        PageHeader(title: "Health", count: problems.count) { ui.back() }
+        PageHeader(title: "Health", count: nil) { ui.back() }
+        HStack(spacing: 0) {
+            ForEach(HealthArea.allCases, id: \.self) { AreaMark(title: $0.title, state: model.health.state(of: $0)) }
+        }
+        .padding(.bottom, 4)
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: gap) {
                 ForEach(problems) { c in
@@ -138,7 +148,7 @@ struct HealthPage: View {
                 }
             }
         }
-        .frame(maxHeight: .infinity)
+        .scrollFade()
         Text(model.notice ?? "\(model.checkedAgo). Runs by itself every six hours. Pulse changes no settings, it opens the right place.")
             .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
     }
@@ -189,7 +199,7 @@ struct CleanupPage: View {
                 }
                 .tile()
             }
-            .frame(maxHeight: .infinity)
+            .scrollFade()
             MainButton(title: chosen.isEmpty ? "Nothing selected" : "Move to Trash", value: chosen.isEmpty ? nil : Fmt.bytes(bytes), on: !chosen.isEmpty && !model.cleaning) {
                 model.clean(chosen)
                 ui.toClean = []
@@ -230,7 +240,7 @@ struct DiskPage: View {
                 LargeFoldersTile(model: model)
             }
         }
-        .frame(maxHeight: .infinity)
+        .scrollFade()
     }
 }
 
@@ -251,7 +261,7 @@ struct StartupPage: View {
                 StartupTile(title: "Set up, not loaded", items: items.filter { $0.loaded != true })
             }
         }
-        .frame(maxHeight: .infinity)
+        .scrollFade()
         line("Open Login Items in System Settings", icon: "arrow.up.right") { model.fix(.loginItems) }.tile()
         Text("Pulse removes nothing here. Items that are registered and were never loaded cannot be seen.")
             .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
@@ -282,10 +292,10 @@ struct DrivesPage: View {
                 }
                 .tile()
             }
-            .frame(maxHeight: .infinity)
+            .scrollFade()
         }
         Spacer(minLength: 0)
-        Text("A drive in use stays connected and you are told which app holds it. Nothing is forced. A closed lid with an external display is not sleep.")
+        Text("A drive in use stays connected, and nothing is forced. A closed lid with an external display is not sleep.")
             .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
             .onAppear { model.refreshDrives() }
     }
@@ -298,7 +308,7 @@ struct HistoryPage: View {
 
     var body: some View {
         let list = model.receipts.list
-        PageHeader(title: "What Pulse did", count: list.count) { ui.back() }
+        PageHeader(title: "History", count: list.count) { ui.back() }
         if list.isEmpty {
             Text("Nothing yet. What you close or clear is written here, with the way back.").font(.system(size: 12)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true).tile()
@@ -306,10 +316,10 @@ struct HistoryPage: View {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 8) { ForEach(list) { ReceiptRow(model: model, receipt: $0) } }.tile()
             }
-            .frame(maxHeight: .infinity)
+            .scrollFade()
         }
         Spacer(minLength: 0)
-        Text(model.notice ?? "The last 100, kept on this Mac. A process that was closed cannot be brought back; an app, a session and the Trash can.")
+        Text(model.notice ?? "The last 100, kept on this Mac. An app, a session and the Trash have a way back; a process has none.")
             .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
     }
 }
@@ -324,17 +334,15 @@ struct ReceiptRow: View {
         let r = receipt
         HStack(spacing: 8) {
             Image(systemName: r.undone ? "arrow.uturn.backward" : r.ok ? "checkmark" : "xmark").font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(r.ok ? Color.secondary : Ink.hot).frame(width: 12)
+                .foregroundStyle(r.ok ? Color.secondary : Color.primary).frame(width: 12)
             VStack(alignment: .leading, spacing: 1) {
                 Text(r.title).font(.system(size: 12)).lineLimit(1)
-                Text([r.detail, r.bytes > 0 && r.ok ? Fmt.bytes(r.bytes) : "", dated ? Fmt.ago(r.at) : ""].filter { !$0.isEmpty }.joined(separator: " · ")).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+                Text([dated ? Fmt.ago(r.at) : "", r.detail, r.bytes > 0 && r.ok ? Fmt.bytes(r.bytes) : ""].filter { !$0.isEmpty }.joined(separator: " · ")).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 4)
             if r.ok, !r.undone, let back = r.back {
                 Button { model.undo(r) } label: {
-                    Text(back.verb).font(.system(size: 10, weight: .semibold)).fixedSize()
-                        .padding(.horizontal, 9).frame(height: 20)
-                        .overlay(Capsule().strokeBorder(.white.opacity(0.25))).contentShape(Capsule())
+                    Text(back.verb).font(.system(size: 10, weight: .semibold)).fixedSize().pill()
                 }
                 .buttonStyle(PressStyle())
             }

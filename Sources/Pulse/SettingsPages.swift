@@ -24,7 +24,7 @@ struct SettingsPage: View {
             Check(title: "Open at login", isOn: Binding(get: { model.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
             Hairline()
             HStack(spacing: 4) {
-                Text("Open with").font(.system(size: 12))
+                Text("Shortcut").font(.system(size: 12))
                 Spacer()
                 ForEach(PulseCore.Settings.Shortcut.allCases, id: \.self) { k in
                     Button { model.settings.shortcut = k } label: {
@@ -32,7 +32,7 @@ struct SettingsPage: View {
                             .foregroundStyle(s.shortcut == k ? Ink.base : Color.secondary)
                             .padding(.horizontal, 8).frame(height: 21)
                             .background(s.shortcut == k ? Color.primary : .clear, in: Capsule())
-                            .overlay(Capsule().strokeBorder(s.shortcut == k ? .clear : Ink.line(.dark)))
+                            .overlay(Capsule(style: .circular).strokeBorder(s.shortcut == k ? .clear : .white.opacity(0.2)))
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
