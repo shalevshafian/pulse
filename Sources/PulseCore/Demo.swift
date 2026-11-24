@@ -9,14 +9,14 @@ public enum Demo {
         chipTempC: 54, ssdTempC: 38, batteryTempC: 31)
 
     public static func snapshot(now: Date = Date()) -> Snapshot {
-        func session(_ pid: Int32, _ name: String, _ project: String, _ from: String, idle hours: Double?, _ mb: UInt64, cpu: Double, child: String? = nil) -> ClaudeSession {
-            ClaudeSession(pid: pid, sessionId: "\(pid)", name: name, cwd: "/Users/me/Code/" + project, status: hours == nil ? "busy" : "idle",
-                          entrypoint: from, procStart: "", statusSince: hours.map { now.addingTimeInterval(-$0 * 3600) },
-                          rssBytes: mb << 20, cpu: cpu, processCount: 3, busyChild: child, busyChildCPU: child == nil ? 0 : cpu)
+        func session(_ pid: Int32, _ name: String, _ project: String, _ from: String, idle hours: Double?, _ mb: UInt64, cpu: Double, child: String? = nil, waits: String? = nil) -> ClaudeSession {
+            ClaudeSession(pid: pid, sessionId: "\(pid)", name: name, cwd: "/Users/me/Code/" + project, status: waits != nil ? "waiting" : hours == nil ? "busy" : "idle",
+                          entrypoint: from, procStart: "", statusSince: hours.map { now.addingTimeInterval(-$0 * 3600) } ?? now.addingTimeInterval(-240),
+                          rssBytes: mb << 20, cpu: cpu, processCount: 3, busyChild: child, busyChildCPU: child == nil ? 0 : cpu, waitingFor: waits, hosts: ["/Applications/Terminal.app"])
         }
         let sessions = [
+            session(2, "Flaky upload test", "api", "cli", idle: nil, 438, cpu: 0, waits: "permission prompt"),
             session(1, "Checkout page", "storefront", "cli", idle: nil, 612, cpu: 96),
-            session(2, "Flaky upload test", "api", "cli", idle: nil, 438, cpu: 41),
             session(3, "Parser rewrite", "compiler", "claude-desktop", idle: 2, 301, cpu: 74, child: "python3"),
             session(4, "Release notes", "docs", "cli", idle: 14, 318, cpu: 0),
             session(5, "Icon set", "storefront", "claude-desktop", idle: 19, 263, cpu: 0),

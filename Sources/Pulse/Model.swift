@@ -136,7 +136,7 @@ final class Model: ObservableObject {
         timer = t
         refreshSnapshot()
         startDriveGuard()
-        if canNotify, settings.welcomed, settings.alertCPU || settings.alertTemp || settings.alertMemory || settings.alertHealth { requestNotifications() }
+        if canNotify, settings.welcomed, settings.anyAlert || (hasClaude && settings.alertWaiting) { requestNotifications() }
     }
 
     /// Reading the sensors takes up to a tenth of a second: never on the main thread.
@@ -207,7 +207,7 @@ final class Model: ObservableObject {
     func finishWelcome(notify: Bool, atLogin: Bool) {
         if atLogin != launchAtLogin { setLaunchAtLogin(atLogin) }
         if notify { requestNotifications() } else {
-            settings.alertCPU = false; settings.alertTemp = false; settings.alertMemory = false; settings.alertHealth = false
+            settings.alertCPU = false; settings.alertTemp = false; settings.alertMemory = false; settings.alertHealth = false; settings.alertWaiting = false
         }
         settings.welcomed = true
         runHealthCheck(shown: true)
@@ -435,6 +435,18 @@ final class Model: ObservableObject {
         return NSWorkspace.shared.runningApplications.first { $0.bundleURL?.path == bundlePath }?.terminate() ?? false
     }
 
+    /// Brings the app a session runs in to the front. The app only: choosing the tab inside it
+    /// would need permission to control that app. The system may refuse.
+    func showHost(of s: ClaudeSession) {
+        let apps = NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular }
+        guard let app = (s.hosts ?? []).lazy.compactMap({ path in apps.first { $0.bundleURL?.path == path } }).first else {
+            notice = "Could not find the app it runs in"
+            return
+        }
+        NSApp.yieldActivation(to: app)
+        if !app.activate() { notice = "Could not open it" }
+    }
+
     // MARK: Drives. Nothing is ticked until the user ticks it, and nothing is forced.
 
     private func startDriveGuard() {
@@ -510,7 +522,7 @@ final class Model: ObservableObject {
     }
 
     private func checkAlerts(_ snap: Snapshot) {
-        let due = alerts.evaluate(system: system, consumers: snap.consumers, settings: settings, now: Date())
+        let due = alerts.evaluate(system: system, consumers: snap.consumers, sessions: snap.sessions, settings: settings, now: Date())
         due.forEach(post)
     }
 

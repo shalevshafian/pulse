@@ -18,6 +18,10 @@ public struct ClaudeSession: Codable, Sendable, Identifiable {
     /// can say "idle" while a build or a script it started is still running.
     public var busyChild: String? = nil
     public var busyChildCPU: Double = 0
+    /// What a waiting session waits for, in Claude Code's own words.
+    public var waitingFor: String? = nil
+    /// The apps it was started from, the nearest first.
+    public var hosts: [String]? = nil
 
     /// Above this (percent of one core, the whole tree) an idle session is still working.
     public static let workingCPU: Double = 25
@@ -26,6 +30,24 @@ public struct ClaudeSession: Codable, Sendable, Identifiable {
     public var id: Int32 { pid }
     public var project: String { (cwd as NSString).lastPathComponent }
     public var isIdle: Bool { status == "idle" }
+    /// It asked something and stands still until someone answers.
+    public var isWaiting: Bool { status == "waiting" }
+    /// Waiting, working, idle.
+    var rank: Int { isWaiting ? 0 : isIdle ? 2 : 1 }
+
+    /// The record is not a public format: words nobody has seen yet say only that it waits.
+    public var waitingText: String? {
+        guard isWaiting else { return nil }
+        switch waitingFor {
+        case "permission prompt": return "Waiting for you: permission"
+        case "input needed": return "Waiting for you: an answer"
+        case "sandbox request": return "Waiting for you: sandbox access"
+        case "dialog open": return "Waiting for you: an open dialog"
+        case "goal proposal": return "Waiting for you: a goal to approve"
+        case "worker request": return "Waiting for you: a worker's request"
+        default: return "Waiting for you"
+        }
+    }
 
     public func idleSeconds(now: Date) -> TimeInterval {
         guard isIdle, let statusSince else { return 0 }
@@ -80,12 +102,27 @@ public enum ClaudeSessions {
                 cpu: tree.reduce(0) { $0 + $1.cpu },
                 processCount: tree.count,
                 busyChild: busiest.flatMap { $0.cpu >= 5 ? ($0.program as NSString).lastPathComponent : nil },
-                busyChildCPU: busiest?.cpu ?? 0))
+                busyChildCPU: busiest?.cpu ?? 0,
+                waitingFor: (d["waitingFor"] as? String).map(Plain.text),
+                hosts: hosts(of: pid, table: table)))
         }
         return out.sorted {
-            if $0.isIdle != $1.isIdle { return !$0.isIdle }
+            if $0.rank != $1.rank { return $0.rank < $1.rank }
             return $0.rssBytes > $1.rssBytes
         }
+    }
+
+    /// The app bundles above a process, the nearest first.
+    static func hosts(of pid: Int32, table: ProcTable) -> [String] {
+        var out: [String] = []
+        var at = table.byPid[pid]?.ppid ?? 0
+        var hops = 0
+        while at > 1, hops < 12, let p = table.byPid[at] {
+            if let b = AppGroups.bundlePath(of: p.program), !out.contains(b) { out.append(b) }
+            at = p.ppid
+            hops += 1
+        }
+        return out
     }
 
     /// A pid alone proves nothing: pids are reused. The session is live only when the

@@ -23,6 +23,9 @@ public struct Settings: Codable, Equatable, Sendable {
     public var alertMemory = true
     /// A new health finding, at most once every two weeks each.
     public var alertHealth = true
+    /// A Claude session that asked something, once per wait.
+    public var alertWaiting = true
+    public var anyAlert: Bool { alertCPU || alertTemp || alertMemory || alertHealth }
 
     // What the menu bar item shows.
     public var barCPU = true
@@ -52,6 +55,8 @@ public struct Settings: Codable, Equatable, Sendable {
         alertTempC = try c.decodeIfPresent(Double.self, forKey: .alertTempC) ?? d.alertTempC
         alertMemory = try c.decodeIfPresent(Bool.self, forKey: .alertMemory) ?? d.alertMemory
         alertHealth = try c.decodeIfPresent(Bool.self, forKey: .alertHealth) ?? d.alertHealth
+        // Someone who turned every alert off before this one existed stays without alerts.
+        alertWaiting = try c.decodeIfPresent(Bool.self, forKey: .alertWaiting) ?? anyAlert
         barCPU = try c.decodeIfPresent(Bool.self, forKey: .barCPU) ?? d.barCPU
         barMemory = try c.decodeIfPresent(Bool.self, forKey: .barMemory) ?? d.barMemory
         barTemp = try c.decodeIfPresent(Bool.self, forKey: .barTemp) ?? d.barTemp

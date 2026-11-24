@@ -169,7 +169,8 @@ struct PanelView: View {
                     Metric("Heat", String(format: "%.0f°", t), hot: s.thermal == "serious" || s.thermal == "critical")
                 }
                 if model.hasClaude {
-                    Button { go(.sessions) } label: { Metric("Sessions", "\(model.snap?.sessions.count ?? 0)", hot: false) }
+                    let waits = model.snap?.sessions.filter(\.isWaiting).count ?? 0
+                    Button { go(.sessions) } label: { Metric("Sessions", waits > 0 ? "\(waits) wait" + (waits == 1 ? "s" : "") : "\(model.snap?.sessions.count ?? 0)", hot: waits > 0) }
                         .buttonStyle(PressStyle())
                 }
                 if s.chipTempC == nil || !model.hasClaude {
@@ -581,11 +582,11 @@ struct PanelView: View {
                     VStack(spacing: 6) {
                         ForEach(list) { session in
                             let consumer = model.snap?.consumers.first { $0.kind == .session && $0.members.first?.pid == session.pid }
-                            SessionRow(session: session) {
+                            SessionRow(session: session, open: { model.showHost(of: session) }) {
                                 if let consumer {
                                     CloseControl(
                                         armed: armed == consumer.id, allowed: model.mayClose(consumer),
-                                        warning: session.isIdle ? nil : "Working",
+                                        warning: session.isIdle ? nil : session.isWaiting ? "Waits" : "Working",
                                         arm: {
                                             armed = consumer.id
                                             DispatchQueue.main.asyncAfter(deadline: .now() + 4) { if armed == consumer.id { armed = nil } }
@@ -722,19 +723,16 @@ struct PanelView: View {
             }
             .tile()
             VStack(alignment: .leading, spacing: 9) {
-                TileLabel("Memory")
+                TileLabel("Also")
                 Check(title: "When memory comes under pressure", isOn: $model.settings.alertMemory)
-            }
-            .tile()
-            VStack(alignment: .leading, spacing: 9) {
-                TileLabel("Health")
                 Check(title: "When a check finds something new", isOn: $model.settings.alertHealth)
+                if model.hasClaude { Check(title: "When a session waits for you", isOn: $model.settings.alertWaiting) }
             }
             .tile()
             HStack {
                 Text(model.notice ?? (model.notificationsAllowed == false
                     ? "macOS is blocking notifications from Pulse. Allow them in System Settings, Notifications."
-                    : "Silent. At most once every half hour."))
+                    : "Silent. At most once every half hour, and once for each wait."))
                     .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 6)
                 Button("Test") { model.requestNotifications(); model.sendTestAlert() }
@@ -1296,6 +1294,7 @@ private struct PageHeader: View {
 
 private struct SessionRow<Trailing: View>: View {
     let session: ClaudeSession
+    let open: () -> Void
     @ViewBuilder let trailing: () -> Trailing
 
     private var source: String {
@@ -1309,21 +1308,29 @@ private struct SessionRow<Trailing: View>: View {
 
     var body: some View {
         HStack(spacing: 8) {
+            Button(action: open) { row.contentShape(Rectangle()) }
+                .buttonStyle(.plain).help("Bring the app it runs in to the front")
+            trailing()
+        }
+        .frame(height: 32)
+    }
+
+    private var row: some View {
+        HStack(spacing: 8) {
             Circle()
-                .fill(session.isIdle ? Color.clear : Color.primary)
+                .fill(session.isWaiting ? Ink.hot : session.isIdle ? Color.clear : Color.primary)
                 .overlay(Circle().strokeBorder(Color.primary.opacity(session.isIdle ? 0.35 : 0), lineWidth: 1))
                 .frame(width: 6, height: 6)
             VStack(alignment: .leading, spacing: 1) {
                 Text(session.name.isEmpty ? session.project : session.name)
                     .font(.system(size: 12)).lineLimit(1)
-                Text("\(session.project) · \(source)" + (session.isIdle ? " · idle \(Fmt.duration(session.idleSeconds(now: Date())))" : " · working"))
+                Text(session.waitingText.map { $0 + " · \(session.project)" }
+                     ?? "\(session.project) · \(source)" + (session.isIdle ? " · idle \(Fmt.duration(session.idleSeconds(now: Date())))" : " · working"))
                     .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 6)
             Text(Fmt.bytes(session.rssBytes)).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
-            trailing()
         }
-        .frame(height: 32)
     }
 }
 

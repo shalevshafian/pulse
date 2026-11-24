@@ -16,15 +16,19 @@ public struct AlertEngine {
     /// The same thing is not announced again inside this window.
     public static let cooldown: TimeInterval = 30 * 60
     static let tempHold: TimeInterval = 60
+    static let waitHold: TimeInterval = 30
 
     var cpuSince: [String: Date] = [:]
     var tempSince: Date?
     var lastSent: [String: Date] = [:]
     var memoryWasHigh = false
+    /// When each waiting session began to wait, and whether it was announced. Forgotten once it
+    /// was seen doing anything else, so a wait is announced once however long it lasts.
+    var waits: [Int32: (since: Date, said: Bool)] = [:]
 
     public init() {}
 
-    public mutating func evaluate(system: SystemStats, consumers: [Consumer], settings: Settings, now: Date) -> [PulseAlert] {
+    public mutating func evaluate(system: SystemStats, consumers: [Consumer], sessions: [ClaudeSession] = [], settings: Settings, now: Date) -> [PulseAlert] {
         var out: [PulseAlert] = []
 
         if settings.alertCPU {
@@ -64,6 +68,24 @@ public struct AlertEngine {
             if let last = lastSent[alert.key], now.timeIntervalSince(last) < Self.cooldown { return false }
             lastSent[alert.key] = now
             return true
+        } + waiting(sessions, settings: settings, now: now)
+    }
+
+    /// Outside the cooldown: a session answered and waiting again is news.
+    private mutating func waiting(_ sessions: [ClaudeSession], settings: Settings, now: Date) -> [PulseAlert] {
+        var still: [Int32: (since: Date, said: Bool)] = [:]
+        var out: [PulseAlert] = []
+        for s in sessions where s.isWaiting {
+            var w = waits[s.pid] ?? (min(s.statusSince ?? now, now), false)
+            if !w.said, now.timeIntervalSince(w.since) >= Self.waitHold {
+                w.said = true
+                if settings.alertWaiting {
+                    out.append(PulseAlert(key: "wait:\(s.pid)", title: s.name.isEmpty ? s.project : s.name, body: s.waitingText ?? ""))
+                }
+            }
+            still[s.pid] = w
         }
+        waits = still
+        return out
     }
 }

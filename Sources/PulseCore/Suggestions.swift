@@ -62,16 +62,7 @@ public struct Snapshot: Codable, Sendable {
         let apps = AppGroups.build(table, excluding: sessionPids)
         // An app that launched a live session (Claude, T3 Code, a terminal) is never
         // offered for quitting: quitting it would take working sessions down with it.
-        var hosts = Set<String>()
-        for s in sessions {
-            var pid = table.byPid[s.pid]?.ppid ?? 0
-            var hops = 0
-            while pid > 1, hops < 12, let p = table.byPid[pid] {
-                if let b = AppGroups.bundlePath(of: p.program) { hosts.insert(b) }
-                pid = p.ppid
-                hops += 1
-            }
-        }
+        let hosts = Set(sessions.flatMap { $0.hosts ?? [] })
         let consumers = Consumers.build(table: table, sessions: sessions, runtimes: runtimes)
         var snap = Snapshot(
             system: system, sessions: sessions, apps: Array(apps.prefix(8)),
@@ -201,6 +192,9 @@ public enum Insights {
         if snap.system.memPressureLevel >= 2, let top = snap.topMemory.first {
             return "Memory is under pressure. Biggest: \(top.name) (\(gb(top.rssBytes)))."
         }
+        let asking = snap.sessions.filter(\.isWaiting)
+        if asking.count > 1 { return "\(asking.count) sessions wait for you." }
+        if let s = asking.first { return "“\(s.name.isEmpty ? s.project : s.name)” waits for you." }
         if let s = snap.sessions.filter(\.stillWorking).max(by: { $0.cpu < $1.cpu }) {
             let name = s.name.isEmpty ? s.project : s.name
             return "“\(name)” says idle, but " + (s.busyChild.map { "its \($0)" } ?? "something in it") + " is still working."

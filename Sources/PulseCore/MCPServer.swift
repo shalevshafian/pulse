@@ -18,7 +18,7 @@ public final class MCPServer {
 
     static let tools: [(name: String, description: String)] = [
         ("system_usage", "CPU load, memory used and pressure level, swap, free disk and thermal state of this Mac, right now."),
-        ("claude_sessions", "Every live Claude Code session on this Mac: name, project folder, idle or busy, how long idle, and the memory of its whole process tree."),
+        ("claude_sessions", "Every live Claude Code session on this Mac: name, project folder, idle, busy or waiting for the user (waitingFor says for what), how long idle, and the memory of its whole process tree."),
         ("top_cpu", "What is using the CPU right now: Claude sessions (whole process tree), apps and other processes grouped by name. cpuPercent is the share of the whole machine."),
         ("top_memory", "What is using the most memory right now, grouped the same way as top_cpu."),
         ("dev_runtimes", "Booted iOS simulators, running Android emulators and Gradle or Kotlin build daemons on this Mac: name, UDID or emulator serial, memory, CPU share and how long each has been up. Check here before booting another one."),
