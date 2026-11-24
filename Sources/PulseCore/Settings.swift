@@ -33,6 +33,9 @@ public struct Settings: Codable, Equatable, Sendable {
     public var barTemp = false
     public var barSessions = false
 
+    /// Reads the limits Claude Code and Codex saved. Off until ticked: one of the files also holds the account.
+    public var planUsage = false
+
     /// Drives disconnected before sleep and connected after. Empty until the user ticks one.
     public var sleepDrives: [SleepDrive] = []
 
@@ -61,6 +64,7 @@ public struct Settings: Codable, Equatable, Sendable {
         barMemory = try c.decodeIfPresent(Bool.self, forKey: .barMemory) ?? d.barMemory
         barTemp = try c.decodeIfPresent(Bool.self, forKey: .barTemp) ?? d.barTemp
         barSessions = try c.decodeIfPresent(Bool.self, forKey: .barSessions) ?? d.barSessions
+        planUsage = try c.decodeIfPresent(Bool.self, forKey: .planUsage) ?? d.planUsage
         sleepDrives = try c.decodeIfPresent([SleepDrive].self, forKey: .sleepDrives) ?? d.sleepDrives
         welcomed = try c.decodeIfPresent(Bool.self, forKey: .welcomed) ?? true
     }

@@ -8,11 +8,17 @@ public final class MCPServer {
     let provider: Provider
     let healthStore: () -> HealthStore
     let sleepCost: () -> SleepCost
+    let settings: () -> Settings
+    let plan: () -> [PlanUsage]
 
     public init(provider: @escaping Provider = { Snapshot.take(system: SystemSampler().sampleBlocking()) },
                 healthStore: @escaping () -> HealthStore = { HealthStore.load() },
-                sleepCost: @escaping () -> SleepCost = { SleepCost.load() }) {
+                sleepCost: @escaping () -> SleepCost = { SleepCost.load() },
+                settings: @escaping () -> Settings = { Settings.load() },
+                plan: @escaping () -> [PlanUsage] = { PlanUsage.read() }) {
         self.provider = provider
+        self.settings = settings
+        self.plan = plan
         self.sleepCost = sleepCost
         self.healthStore = healthStore
     }
@@ -29,6 +35,10 @@ public final class MCPServer {
         ("optimize_suggestions", "Ranked suggestions for freeing memory (reclaimBytes is what a row holds now, the most that closing it can give back): long-idle Claude sessions (stillWorking marks one whose own processes are running), leftover agent processes, simulators, emulators and build daemons up for over an hour, heavy apps. Read-only; the user applies them from the Pulse menu bar item."),
         ("health_report", "The last health check of this Mac: score out of 100, the open problems (backup, protection, updates, storage, battery, stability, performance, startup items), what could not be read, and folders that can be rebuilt. Reads the stored report and gives its age; it does not run a check."),
     ]
+
+    /// There only when the user ticked it in Settings.
+    static let planTool = (name: "plan_usage", description: "How much of the Claude and Codex plans is used, as those tools last saved it on this Mac: percent, when each limit resets and how old the reading is. Empty when nothing recent was saved.")
+    var offered: [(name: String, description: String)] { settings().planUsage ? Self.tools + [Self.planTool] : Self.tools }
 
     public func run() {
         while let line = readLine(strippingNewline: true) {
@@ -58,7 +68,7 @@ public final class MCPServer {
         case "ping":
             return result(id, [String: Any]())
         case "tools/list":
-            return result(id, ["tools": Self.tools.map {
+            return result(id, ["tools": offered.map {
                 ["name": $0.name, "description": $0.description,
                  "inputSchema": ["type": "object", "properties": [String: Any]()],
                  "annotations": ["readOnlyHint": true]] as [String: Any]
@@ -75,6 +85,7 @@ public final class MCPServer {
 
     func call(_ name: String) -> String? {
         if name == "health_report" { return healthReport() }
+        if name == Self.planTool.name { return settings().planUsage ? json(plan()) : nil }
         let snap = provider()
         switch name {
         case "system_usage": return json(snap.system)

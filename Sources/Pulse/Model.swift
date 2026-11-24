@@ -49,6 +49,7 @@ final class Model: ObservableObject {
     @Published var largest: LargeFolders?
     private var measuredAt = Date.distantPast
     private var measuring = false
+    @Published var plan: [PlanUsage] = []
     private var appNames: [String: String] = [:]
     @Published var lastSleep: SleepRecord?
     /// The last two minutes, as fractions 0...1, for the graphs.
@@ -204,6 +205,8 @@ final class Model: ObservableObject {
         health = Demo.health()
         lastSleep = Demo.lastSleep()
         largest = Demo.largest()
+        settings.planUsage = true
+        plan = Demo.plan()
         syncScene()
         result = OptimizeResult(lines: [
             .init(text: "Closed: Icon set", ok: true), .init(text: "Closed: Release notes", ok: true),
@@ -354,6 +357,14 @@ final class Model: ObservableObject {
         let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: name)
         appNames[name] = url?.deletingPathExtension().lastPathComponent ?? ""
         return url?.deletingPathExtension().lastPathComponent
+    }
+
+    func refreshPlan() {
+        guard live, settings.planUsage else { return }
+        DispatchQueue.global(qos: .utility).async {
+            let plan = PlanUsage.read()
+            DispatchQueue.main.async { self.plan = plan }
+        }
     }
 
     // MARK: Menu bar text

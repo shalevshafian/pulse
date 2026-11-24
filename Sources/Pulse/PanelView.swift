@@ -588,6 +588,7 @@ struct PanelView: View {
         let list = model.snap?.sessions ?? []
         return Group {
             PageHeader(title: "Claude sessions", count: list.count) { go(.overview) }
+            PlanUsageTile(model: model)
             if list.isEmpty {
                 Text("No open sessions").font(.callout).foregroundStyle(.secondary).tile()
             } else {
@@ -610,7 +611,7 @@ struct PanelView: View {
                         }
                     }
                 }
-                .frame(height: min(CGFloat(list.count) * 38, 342))
+                .frame(height: min(CGFloat(list.count) * 38, model.settings.planUsage ? 244 : 342))
                 .tile()
             }
             if let notice = model.notice {
@@ -775,6 +776,15 @@ struct PanelView: View {
                 }
             }
             .tile()
+            if model.hasClaude {
+                VStack(alignment: .leading, spacing: 9) {
+                    TileLabel("On the sessions page")
+                    Check(title: "How much of the plan is used", isOn: $model.settings.planUsage)
+                    Text("Reads the limits Claude Code and Codex already saved on this Mac. Nothing is sent. Claude Code keeps them in ~/.claude.json, which also holds your account; Pulse takes only the limits from it and keeps nothing.")
+                        .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                .tile()
+            }
             VStack(alignment: .leading, spacing: 9) {
                 TileLabel("For agents")
                 Text("Pulse is also a read-only MCP server: an agent can see this Mac, and cannot close or change anything.")

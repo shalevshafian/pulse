@@ -72,6 +72,12 @@ public enum Demo {
         return f
     }
 
+    public static func plan(now: Date = Date()) -> [PlanUsage] {
+        [PlanUsage(tool: "Claude", readAt: now.addingTimeInterval(-47 * 60), limits: [
+            .init(name: "week", percent: 62, resetsAt: now.addingTimeInterval(2 * 86400)), .init(name: "5 hours", percent: 18, resetsAt: now.addingTimeInterval(7200))]),
+         PlanUsage(tool: "Codex", readAt: now.addingTimeInterval(-12 * 60), limits: [.init(name: "week", percent: 26, resetsAt: now.addingTimeInterval(4 * 86400))])]
+    }
+
     public static func lastSleep(now: Date = Date()) -> SleepRecord {
         SleepRecord(from: now.addingTimeInterval(-12 * 3600), to: now.addingTimeInterval(-4 * 3600), lost: 4, darkWakes: 3)
     }

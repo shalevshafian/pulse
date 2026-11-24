@@ -195,7 +195,7 @@ final class CoreTests: XCTestCase {
 
     func testMCPHandshakeListAndCall() throws {
         let snap = Snapshot(system: .empty, sessions: [], apps: [], topCPU: [], topMemory: [], suggestions: [])
-        let server = MCPServer { snap }
+        let server = MCPServer(provider: { snap }, settings: { Settings() })
         func obj(_ s: String?) throws -> [String: Any] {
             try XCTUnwrap(JSONSerialization.jsonObject(with: Data(try XCTUnwrap(s).utf8)) as? [String: Any])
         }
