@@ -8,15 +8,18 @@ public final class MCPServer {
     let provider: Provider
     let healthStore: () -> HealthStore
     let sleepCost: () -> SleepCost
+    let history: () -> LoadHistory
     let settings: () -> Settings
     let plan: () -> [PlanUsage]
 
     public init(provider: @escaping Provider = { Snapshot.take(system: SystemSampler().sampleBlocking()) },
                 healthStore: @escaping () -> HealthStore = { HealthStore.load() },
                 sleepCost: @escaping () -> SleepCost = { SleepCost.load() },
+                history: @escaping () -> LoadHistory = { LoadHistory.load() },
                 settings: @escaping () -> Settings = { Settings.load() },
                 plan: @escaping () -> [PlanUsage] = { PlanUsage.read() }) {
         self.provider = provider
+        self.history = history
         self.settings = settings
         self.plan = plan
         self.sleepCost = sleepCost
@@ -30,6 +33,7 @@ public final class MCPServer {
         ("claude_sessions", "Every live Claude Code session on this Mac: name, project folder, idle, busy or waiting for the user (waitingFor says for what), how long idle, and the memory of its whole process tree."),
         ("top_cpu", "What is using the CPU right now: Claude sessions (whole process tree), apps and other processes grouped by name. cpuPercent is the share of the whole machine."),
         ("top_memory", "What is using the most memory right now, grouped the same way as top_cpu."),
+        ("recent_load", "CPU time and peak memory of sessions, apps and processes over the last twelve hours, as the Pulse menu bar app counted them while it was running. Saved every ten minutes. CPU time, not electricity."),
         ("dev_runtimes", "Booted iOS simulators, running Android emulators and Gradle or Kotlin build daemons on this Mac: name, UDID or emulator serial, memory, CPU share and how long each has been up. Check here before booting another one."),
         ("sleep_blockers", "What asks this Mac not to sleep right now (app, session or process, why, since when), and the last sleeps: how long, how much charge each cost on battery, how often the Mac woke by itself."),
         ("optimize_suggestions", "Ranked suggestions for freeing memory (reclaimBytes is what a row holds now, the most that closing it can give back): long-idle Claude sessions (stillWorking marks one whose own processes are running), leftover agent processes, simulators, emulators and build daemons up for over an hour, heavy apps. Read-only; the user applies them from the Pulse menu bar item."),
@@ -85,6 +89,11 @@ public final class MCPServer {
 
     func call(_ name: String) -> String? {
         if name == "health_report" { return healthReport() }
+        if name == "recent_load" {
+            struct Out: Encodable { var since: Date?, rows: [LoadHistory.Row] }
+            let h = history(), now = Date()
+            return json(Out(since: h.since(now: now), rows: Array(h.rows(now: now).prefix(40))))
+        }
         if name == Self.planTool.name { return settings().planUsage ? json(plan()) : nil }
         let snap = provider()
         switch name {

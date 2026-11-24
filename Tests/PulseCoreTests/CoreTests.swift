@@ -206,7 +206,7 @@ final class CoreTests: XCTestCase {
         let tools = try XCTUnwrap((list["result"] as? [String: Any])?["tools"] as? [[String: Any]])
         // The MCP surface is read-only: an agent must not be able to close a session.
         XCTAssertEqual(tools.compactMap { $0["name"] as? String }.sorted(),
-                       ["claude_sessions", "dev_runtimes", "health_report", "optimize_suggestions", "sleep_blockers", "system_usage", "top_cpu", "top_memory"])
+                       ["claude_sessions", "dev_runtimes", "health_report", "optimize_suggestions", "recent_load", "sleep_blockers", "system_usage", "top_cpu", "top_memory"])
         let call = try obj(server.handle(#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"claude_sessions"}}"#))
         let content = try XCTUnwrap((call["result"] as? [String: Any])?["content"] as? [[String: Any]])
         XCTAssertEqual(content.first?["text"] as? String, "[]")

@@ -30,6 +30,7 @@ struct PanelView: View {
     @State private var page: Page
     @State private var selected: Set<String>
     @State private var byMemory = false
+    @State private var overHours = CommandLine.arguments.contains("--12h")
     @State private var filter = ""
     @State private var armed: String?
     @State private var newWord = ""
@@ -67,7 +68,7 @@ struct PanelView: View {
                 case .processes: processes
                 case .rules: ScrollView(showsIndicators: false) { VStack(alignment: .leading, spacing: gap) { rules } }
                 case .drives: drivesPage
-                case .sleep: SleepPage(model: model, back: { go(sleepBack) }, open: { filter = $0; go(.processes) })
+                case .sleep: SleepPage(model: model, back: { go(sleepBack) }, open: { overHours = false; filter = $0; go(.processes) })
                 case .alerts: ScrollView(showsIndicators: false) { VStack(alignment: .leading, spacing: gap) { alerts } }
                 case .display: ScrollView(showsIndicators: false) { VStack(alignment: .leading, spacing: gap) { display } }
                 }
@@ -158,11 +159,11 @@ struct PanelView: View {
             hero
             Hairline()
             HStack(spacing: 0) {
-                Button { byMemory = false; filter = ""; go(.processes) } label: {
+                Button { overHours = false; byMemory = false; filter = ""; go(.processes) } label: {
                     Metric("CPU", String(format: "%.0f%%", s.cpuPercent), hot: s.cpuPercent >= 85)
                 }
                 .buttonStyle(PressStyle())
-                Button { byMemory = true; filter = ""; go(.processes) } label: {
+                Button { overHours = false; byMemory = true; filter = ""; go(.processes) } label: {
                     Metric("Memory", String(format: "%.0f%%", s.memPercent), hot: s.memPressureLevel >= 2)
                 }
                 .buttonStyle(PressStyle())
@@ -201,7 +202,7 @@ struct PanelView: View {
             Spacer(minLength: 0)
             Hairline()
             HStack(spacing: 4) {
-                Button { filter = ""; go(.processes) } label: {
+                Button { overHours = false; filter = ""; go(.processes) } label: {
                     HStack(spacing: 5) {
                         Text("All processes").font(.system(size: 11, weight: .medium))
                         Text("[\(model.snap?.consumers.count ?? 0)]").font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
@@ -486,17 +487,21 @@ struct PanelView: View {
             Spacer(minLength: 4)
             Text(byMemory ? Fmt.bytes(c.rssBytes) : String(format: decimals ? "%.1f%%" : "%.0f%%", c.cpuPercent))
                 .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
-            CloseControl(
-                armed: armed == c.id, allowed: model.mayClose(c),
-                warning: model.hostsSessions(c) ? "Runs sessions"
-                    : model.snap?.runtimes.first { $0.id == c.runtimeID }?.working == true ? "Working" : nil,
-                arm: {
-                    armed = c.id
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 4) { if armed == c.id { armed = nil } }
-                },
-                fire: { armed = nil; model.close(c) })
+            closeControl(c)
         }
         .frame(height: 20)
+    }
+
+    private func closeControl(_ c: Consumer) -> some View {
+        CloseControl(
+            armed: armed == c.id, allowed: model.mayClose(c),
+            warning: model.hostsSessions(c) ? "Runs sessions"
+                : model.snap?.runtimes.first { $0.id == c.runtimeID }?.working == true ? "Working" : nil,
+            arm: {
+                armed = c.id
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4) { if armed == c.id { armed = nil } }
+            },
+            fire: { armed = nil; model.close(c) })
     }
 
     // MARK: Plan
@@ -624,26 +629,35 @@ struct PanelView: View {
 
     private var processes: some View {
         let all = model.snap?.consumers ?? []
+        let past = model.past.filter { filter.isEmpty || $0.name.localizedCaseInsensitiveContains(filter) }
         let shown = all
             .filter { filter.isEmpty || $0.name.localizedCaseInsensitiveContains(filter) }
             .sorted { byMemory ? $0.rssBytes > $1.rssBytes : $0.cpuPercent > $1.cpuPercent }
         return Group {
-            PageHeader(title: "All processes", count: shown.count) { go(.overview) }
+            PageHeader(title: overHours ? "The last 12 hours" : "All processes", count: overHours ? past.count : shown.count) { go(.overview) }
             HStack(spacing: 10) {
                 TextField("Search", text: $filter)
                     .textFieldStyle(.plain).font(.system(size: 12))
                 Spacer(minLength: 0)
-                SortSwitch(byMemory: $byMemory)
+                SortSwitch(byMemory: $byMemory, overHours: $overHours)
             }
             .tile(padding: 9)
             ScrollView {
                 LazyVStack(spacing: 6) {
-                    ForEach(shown) { consumerRow($0, decimals: true) }
+                    if overHours {
+                        ForEach(past) { row in
+                            PastRow(row: row) {
+                                if let c = all.first(where: { $0.kind == row.kind && $0.name == row.name }) { closeControl(c) } else { Color.clear.frame(width: 20, height: 20) }
+                            }
+                        }
+                    } else {
+                        ForEach(shown) { consumerRow($0, decimals: true) }
+                    }
                 }
             }
             .frame(maxHeight: .infinity)
             .tile()
-            Text(model.notice ?? "Processes with the same name share a row. Press x and then Close to close the whole row.")
+            Text(model.notice ?? (overHours ? Past.note(since: model.pastSince) : "Processes with the same name share a row. Press x and then Close to close the whole row."))
                 .font(.system(size: 10)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
         }
@@ -739,6 +753,7 @@ struct PanelView: View {
             VStack(alignment: .leading, spacing: 9) {
                 TileLabel("Also")
                 Check(title: "When memory comes under pressure", isOn: $model.settings.alertMemory)
+                Check(title: "When something keeps growing", isOn: $model.settings.alertGrowth)
                 Check(title: "When a check finds something new", isOn: $model.settings.alertHealth)
                 if model.hasClaude { Check(title: "When a session waits for you", isOn: $model.settings.alertWaiting) }
             }
@@ -746,7 +761,7 @@ struct PanelView: View {
             HStack {
                 Text(model.notice ?? (model.notificationsAllowed == false
                     ? "macOS is blocking notifications from Pulse. Allow them in System Settings, Notifications."
-                    : "Silent. At most once every half hour, and once for each wait."))
+                    : "Silent. Once every half hour at most, or per wait."))
                     .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 6)
                 Button("Test") { model.requestNotifications(); model.sendTestAlert() }
@@ -1161,10 +1176,12 @@ struct Sparkline: View {
 /// CPU / Memory, as two words rather than a system control.
 private struct SortSwitch: View {
     @Binding var byMemory: Bool
+    @Binding var overHours: Bool
     var body: some View {
         HStack(spacing: 10) {
-            word("CPU", on: !byMemory) { byMemory = false }
-            word("Memory", on: byMemory) { byMemory = true }
+            word("CPU", on: !byMemory && !overHours) { byMemory = false; overHours = false }
+            word("Memory", on: byMemory && !overHours) { byMemory = true; overHours = false }
+            word("12 h", on: overHours) { overHours = true }
         }
     }
 

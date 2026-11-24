@@ -13,6 +13,8 @@ public struct ProcInfo: Codable, Sendable, Equatable {
     public var command: String
     /// `ps comm`: the executable alone, whole even when its path has spaces. "" when unknown.
     public var exec: String = ""
+    /// CPU time since it started. Nil when ps did not say.
+    public var cpuSeconds: Double? = nil
 
     /// Where the program lives, for naming and grouping. The command line is only a
     /// fallback: cut at the first space it turns ".../iOS 26.4.simruntime/..." into "iOS".
@@ -47,9 +49,17 @@ public struct ProcTable: Sendable {
 
     public static func parse(_ text: String, execs: String = "", footprint: (Int32) -> UInt64? = { _ in nil }) -> ProcTable {
         var execByPid: [Int32: String] = [:]
+        var timeByPid: [Int32: Double] = [:]
         for line in execs.split(separator: "\n") {
             let parts = line.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
-            if parts.count == 2, let pid = Int32(parts[0]) { execByPid[pid] = parts[1].trimmingCharacters(in: .whitespaces) }
+            guard parts.count == 2, let pid = Int32(parts[0]) else { continue }
+            var rest = parts[1].trimmingCharacters(in: .whitespaces)
+            let word = rest.prefix { $0 != " " }
+            if let time = cpuTime(word) {
+                timeByPid[pid] = time
+                rest = rest.dropFirst(word.count).trimmingCharacters(in: .whitespaces)
+            }
+            execByPid[pid] = rest
         }
         var procs: [ProcInfo] = []
         for line in text.split(separator: "\n") {
@@ -61,14 +71,23 @@ public struct ProcTable: Sendable {
             procs.append(ProcInfo(
                 pid: pid, ppid: ppid, rssBytes: footprint(pid) ?? rssKB * 1024, cpu: cpu,
                 lstart: parts[4...8].joined(separator: " "),
-                command: parts[9].trimmingCharacters(in: .whitespaces), exec: execByPid[pid] ?? ""))
+                command: parts[9].trimmingCharacters(in: .whitespaces), exec: execByPid[pid] ?? "", cpuSeconds: timeByPid[pid]))
         }
         return ProcTable(procs)
     }
 
+    /// "1463:23.52": minutes without an end, then seconds. With hours before them it is read too.
+    static func cpuTime(_ s: Substring) -> Double? {
+        let parts = s.split(separator: ":", omittingEmptySubsequences: false)
+        guard (2...3).contains(parts.count), parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy { ("0"..."9").contains($0) || $0 == "." } }) else { return nil }
+        var total = 0.0
+        for p in parts { guard let n = Double(p) else { return nil }; total = total * 60 + n }
+        return total
+    }
+
     public static func live() -> ProcTable {
         parse(Shell.run("/bin/ps", ["-axo", "pid=,ppid=,rss=,pcpu=,lstart=,command="]),
-              execs: Shell.run("/bin/ps", ["-axo", "pid=,comm="]), footprint: Footprint.read)
+              execs: Shell.run("/bin/ps", ["-axo", "pid=,time=,comm="]), footprint: Footprint.read)
     }
 }
 

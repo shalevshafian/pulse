@@ -22,6 +22,7 @@ public struct AlertEngine {
     var tempSince: Date?
     var lastSent: [String: Date] = [:]
     var memoryWasHigh = false
+    var growth = Growth()
     /// When each waiting session began to wait, and whether it was announced. Forgotten once it
     /// was seen doing anything else, so a wait is announced once however long it lasts.
     var waits: [Int32: (since: Date, said: Bool)] = [:]
@@ -63,6 +64,15 @@ public struct AlertEngine {
             out.append(PulseAlert(key: "memory", title: "Memory is under pressure", body: "macOS is compressing and swapping. Open Pulse to see what can be closed."))
         }
         memoryWasHigh = memoryHigh
+
+        if settings.alertGrowth {
+            for g in growth.add(consumers, at: now) {
+                out.append(PulseAlert(key: "grow:" + g.row.id, title: "\(g.row.name) keeps growing", body: String(
+                    format: "From %.1f to %.1f GB in an hour, without giving any back.", Double(g.from) / 1_073_741_824, Double(g.row.rssBytes) / 1_073_741_824)))
+            }
+        } else {
+            growth = Growth()
+        }
 
         return out.filter { alert in
             if let last = lastSent[alert.key], now.timeIntervalSince(last) < Self.cooldown { return false }

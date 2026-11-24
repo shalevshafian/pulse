@@ -25,6 +25,8 @@ public struct Settings: Codable, Equatable, Sendable {
     public var alertHealth = true
     /// A Claude session that asked something, once per wait.
     public var alertWaiting = true
+    /// Something whose memory only grows. Off until asked for.
+    public var alertGrowth = false
     public var anyAlert: Bool { alertCPU || alertTemp || alertMemory || alertHealth }
 
     // What the menu bar item shows.
@@ -64,6 +66,7 @@ public struct Settings: Codable, Equatable, Sendable {
         barMemory = try c.decodeIfPresent(Bool.self, forKey: .barMemory) ?? d.barMemory
         barTemp = try c.decodeIfPresent(Bool.self, forKey: .barTemp) ?? d.barTemp
         barSessions = try c.decodeIfPresent(Bool.self, forKey: .barSessions) ?? d.barSessions
+        alertGrowth = try c.decodeIfPresent(Bool.self, forKey: .alertGrowth) ?? d.alertGrowth
         planUsage = try c.decodeIfPresent(Bool.self, forKey: .planUsage) ?? d.planUsage
         sleepDrives = try c.decodeIfPresent([SleepDrive].self, forKey: .sleepDrives) ?? d.sleepDrives
         welcomed = try c.decodeIfPresent(Bool.self, forKey: .welcomed) ?? true

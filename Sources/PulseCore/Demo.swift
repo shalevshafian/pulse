@@ -78,6 +78,15 @@ public enum Demo {
          PlanUsage(tool: "Codex", readAt: now.addingTimeInterval(-12 * 60), limits: [.init(name: "week", percent: 26, resetsAt: now.addingTimeInterval(4 * 86400))])]
     }
 
+    public static func past() -> [LoadHistory.Row] {
+        func row(_ kind: Consumer.Kind, _ name: String, _ seconds: Double, _ mb: UInt64) -> LoadHistory.Row {
+            LoadHistory.Row(kind: kind, name: name, cpuSeconds: seconds, peakBytes: mb << 20)
+        }
+        return [row(.process, "rustc", 5_040, 6_100), row(.session, "Checkout page", 2_640, 812), row(.app, "Safari", 1_980, 4_410), row(.runtime, "iPhone 17 simulator", 1_240, 5_900),
+                row(.app, "Video Converter", 900, 2_200), row(.session, "Parser rewrite", 610, 530), row(.process, "mds_stores", 340, 260), row(.app, "Xcode", 290, 2_900),
+                row(.process, "WindowServer", 270, 720), row(.app, "Mail", 48, 0)]
+    }
+
     public static func lastSleep(now: Date = Date()) -> SleepRecord {
         SleepRecord(from: now.addingTimeInterval(-12 * 3600), to: now.addingTimeInterval(-4 * 3600), lost: 4, darkWakes: 3)
     }

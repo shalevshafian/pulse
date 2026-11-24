@@ -50,6 +50,11 @@ final class Model: ObservableObject {
     private var measuredAt = Date.distantPast
     private var measuring = false
     @Published var plan: [PlanUsage] = []
+    /// The last twelve hours, while the panel is open. The history itself belongs to `queue`.
+    @Published var past: [LoadHistory.Row] = []
+    @Published var pastSince: Date?
+    private var history = LoadHistory()
+    private var historySaved = Date()
     private var appNames: [String: String] = [:]
     @Published var lastSleep: SleepRecord?
     /// The last two minutes, as fractions 0...1, for the graphs.
@@ -141,6 +146,7 @@ final class Model: ObservableObject {
         let t = Timer(timeInterval: 2, repeats: true) { [weak self] _ in self?.tick() }
         RunLoop.main.add(t, forMode: .common)
         timer = t
+        if canNotify { queue.async { self.history = LoadHistory.load() } }
         refreshSnapshot()
         startDriveGuard()
         if canNotify, settings.welcomed, settings.anyAlert || (hasClaude && settings.alertWaiting) { requestNotifications() }
@@ -185,9 +191,19 @@ final class Model: ObservableObject {
         refreshing = true
         let system = self.system
         let settings = self.settings
+        let open = panelOpen, keep = canNotify
         queue.async {
             let snap = Snapshot.take(system: system, settings: settings)
+            let now = Date()
+            self.history.add(snap.consumers, at: now)
+            // The installed app only: a bench must not write over its history.
+            if keep, now.timeIntervalSince(self.historySaved) >= 600 {
+                self.historySaved = now
+                self.history.save(to: LoadHistory.defaultURL)
+            }
+            let past = open ? (self.history.rows(now: now), self.history.since(now: now)) : nil
             DispatchQueue.main.async {
+                if let past { self.past = past.0; self.pastSince = past.1 }
                 self.snap = snap
                 self.refreshing = false
                 self.checkAlerts(snap)
@@ -205,6 +221,8 @@ final class Model: ObservableObject {
         health = Demo.health()
         lastSleep = Demo.lastSleep()
         largest = Demo.largest()
+        past = Demo.past()
+        pastSince = Date().addingTimeInterval(-11.5 * 3600)
         settings.planUsage = true
         plan = Demo.plan()
         syncScene()

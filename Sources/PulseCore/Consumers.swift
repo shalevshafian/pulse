@@ -16,6 +16,9 @@ public struct Consumer: Codable, Sendable, Identifiable {
     public var bundlePath: String? = nil
     /// Set for a simulator, emulator or build daemon: closing goes through its own shutdown.
     public var runtimeID: String? = nil
+    /// Every process of the row with its CPU time. Not sent to agents.
+    public var times: [ProcTime] = []
+    private enum CodingKeys: String, CodingKey { case kind, name, rssBytes, cpuPercent, processCount, members, bundlePath, runtimeID }
     public var id: String { runtimeID ?? "\(kind.rawValue):\(name)" }
 }
 
@@ -36,7 +39,8 @@ public enum Consumers {
             taken.formUnion(r.members.map(\.pid))
             out.append(Consumer(
                 kind: .runtime, name: r.name, rssBytes: r.rssBytes, cpuPercent: r.cpuPercent,
-                processCount: r.processCount, members: [r.root], runtimeID: r.id))
+                processCount: r.processCount, members: [r.root], runtimeID: r.id,
+                times: r.members.compactMap { table.byPid[$0.pid].flatMap(time) }))
         }
         for s in sessions {
             let tree = table.tree(of: s.pid).filter { !taken.contains($0.pid) }
@@ -44,7 +48,7 @@ public enum Consumers {
             out.append(Consumer(
                 kind: .session, name: s.name.isEmpty ? s.project : s.name, rssBytes: s.rssBytes,
                 cpuPercent: s.cpu / n, processCount: tree.count,
-                members: [ProcRef(pid: s.pid, lstart: table.byPid[s.pid]?.lstart ?? "")]))
+                members: [ProcRef(pid: s.pid, lstart: table.byPid[s.pid]?.lstart ?? "")], times: tree.compactMap(time)))
         }
         var groups: [String: Consumer] = [:]
         for p in table.all where !taken.contains(p.pid) {
@@ -62,6 +66,7 @@ public enum Consumers {
             let key = "\(kind.rawValue):\(name)"
             var c = groups[key] ?? Consumer(kind: kind, name: name, rssBytes: 0, cpuPercent: 0, processCount: 0, bundlePath: bundlePath)
             c.members.append(ProcRef(pid: p.pid, lstart: p.lstart))
+            if let t = time(p) { c.times.append(t) }
             c.rssBytes += p.rssBytes
             c.cpuPercent += p.cpu / n
             c.processCount += 1
@@ -69,6 +74,8 @@ public enum Consumers {
         }
         return out + groups.values
     }
+
+    private static func time(_ p: ProcInfo) -> ProcTime? { p.cpuSeconds.map { ProcTime(pid: p.pid, lstart: p.lstart, seconds: $0) } }
 
     public static func topCPU(_ all: [Consumer], _ count: Int) -> [Consumer] {
         Array(all.sorted { $0.cpuPercent > $1.cpuPercent }.prefix(count))
