@@ -25,6 +25,9 @@ public enum Cleanup {
         ("Library/Caches/pip", "pip cache", "Downloaded again on the next install", ["pip", "pip3"]),
         ("Library/Caches/node-gyp", "node-gyp cache", "Downloaded again on the next build", ["node-gyp"]),
         ("Library/Caches/Homebrew", "Homebrew cache", "Downloaded again on the next install", ["brew"]),
+        (".gradle/wrapper", "Gradle versions", "Downloaded again on the next build", ["java", "gradle"]),
+        ("Library/Caches/ms-playwright", "Playwright browsers", "Downloaded again by its own install", ["playwright"]),
+        ("Library/Caches/org.swift.swiftpm", "Swift package cache", "Downloaded again on the next build", ["Xcode", "xcodebuild", "swift-build", "swift-package", "swift-test", "swift-run"]),
         (".cargo/registry/cache", "Downloaded cargo crates", "Downloaded again on the next build", ["cargo", "rustc"]),
     ]
 

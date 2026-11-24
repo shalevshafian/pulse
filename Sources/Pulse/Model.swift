@@ -45,6 +45,11 @@ final class Model: ObservableObject {
     @Published var drives: [DriveGuard.Row]?
     @Published var drivesOut: [SleepDrive] = []
     private var driveGuard: DriveGuard?
+    /// The largest folders of the Library, kept for an hour.
+    @Published var largest: LargeFolders?
+    private var measuredAt = Date.distantPast
+    private var measuring = false
+    private var appNames: [String: String] = [:]
     @Published var lastSleep: SleepRecord?
     /// The last two minutes, as fractions 0...1, for the graphs.
     @Published var cpuHistory: [Double] = []
@@ -198,6 +203,7 @@ final class Model: ObservableObject {
         snap = Demo.snapshot()
         health = Demo.health()
         lastSleep = Demo.lastSleep()
+        largest = Demo.largest()
         syncScene()
         result = OptimizeResult(lines: [
             .init(text: "Closed: Icon set", ok: true), .init(text: "Closed: Release notes", ok: true),
@@ -325,6 +331,29 @@ final class Model: ObservableObject {
                 if !moved.isEmpty { self.play([(.burst, 0.45), (.tick, 1.6), (.sphere, 0)]) }
             }
         }
+    }
+
+    /// When the cleanup page opens: ten seconds of reading folder sizes, off the main thread.
+    func measureLibrary() {
+        guard live, !measuring, Date().timeIntervalSince(measuredAt) > 3600 else { return }
+        measuring = true
+        DispatchQueue.global(qos: .utility).async {
+            let found = LargeFolders.find()
+            DispatchQueue.main.async {
+                self.measuring = false
+                self.measuredAt = Date()
+                self.largest = found
+            }
+        }
+    }
+
+    /// The app a folder belongs to, when its name is a bundle identifier.
+    func appName(ofFolder name: String) -> String? {
+        guard live, name.contains(".") else { return nil }
+        if let known = appNames[name] { return known.isEmpty ? nil : known }
+        let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: name)
+        appNames[name] = url?.deletingPathExtension().lastPathComponent ?? ""
+        return url?.deletingPathExtension().lastPathComponent
     }
 
     // MARK: Menu bar text

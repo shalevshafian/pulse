@@ -366,20 +366,25 @@ struct PanelView: View {
             PageHeader(title: "What can be cleared", count: items.count) { go(.health) }
             Text("Only things that are rebuilt or downloaded again. Everything goes to the Trash and can be put back. What is in use is locked.")
                 .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
-            if items.isEmpty {
-                Text("Nothing to clear right now").font(.system(size: 12)).foregroundStyle(.secondary).tile()
-            } else {
-                ScrollView {
-                    VStack(spacing: 0) {
-                        ForEach(items) { item in
-                            CleanRow(item: item, isOn: Binding(
-                                get: { toClean.contains(item.id) && item.blockedBy == nil },
-                                set: { if $0 { toClean.insert(item.id) } else { toClean.remove(item.id) } }))
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: gap) {
+                    if items.isEmpty {
+                        Text("Nothing to clear right now").font(.system(size: 12)).foregroundStyle(.secondary).tile()
+                    } else {
+                        VStack(spacing: 0) {
+                            ForEach(items) { item in
+                                CleanRow(item: item, isOn: Binding(
+                                    get: { toClean.contains(item.id) && item.blockedBy == nil },
+                                    set: { if $0 { toClean.insert(item.id) } else { toClean.remove(item.id) } }))
+                            }
                         }
+                        .tile()
                     }
+                    LargeFoldersTile(model: model)
                 }
-                .frame(height: min(CGFloat(items.count) * 38, 266))
-                .tile()
+            }
+            .frame(maxHeight: .infinity)
+            if !items.isEmpty {
                 Button { model.clean(chosen); toClean = []; go(.overview) } label: {
                     HStack {
                         Text(chosen.isEmpty ? "Nothing selected" : "Move to Trash").font(.system(size: 13, weight: .semibold))

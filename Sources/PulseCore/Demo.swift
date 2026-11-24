@@ -62,6 +62,16 @@ public enum Demo {
         return snap
     }
 
+    public static func largest() -> LargeFolders {
+        var f = LargeFolders()
+        let home = "/Users/me/Library/"
+        f.folders = [("Developer/CoreSimulator", 31), ("Application Support/Photo Studio", 19), ("Application Support/Games", 11), ("Developer/Xcode", 6),
+                     ("Application Support/Mail Archive", 4), ("Caches/com.example.browser", 2), ("Caches/Map Tiles", 1), ("Logs/Build Server", 1)]
+            .map { .init(path: home + $0.0, bytes: UInt64($0.1) << 30 + 300 << 20) }
+        f.refused = 19
+        return f
+    }
+
     public static func lastSleep(now: Date = Date()) -> SleepRecord {
         SleepRecord(from: now.addingTimeInterval(-12 * 3600), to: now.addingTimeInterval(-4 * 3600), lost: 4, darkWakes: 3)
     }
