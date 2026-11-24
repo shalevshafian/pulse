@@ -325,7 +325,7 @@ final class Model: ObservableObject {
             NSWorkspace.shared.open(url)
         } else if f == .acceptStartup {
             changeHealth { s in
-                s.knownStartup = s.report?.startup.map(\.label)
+                s.acceptStartup()
                 s.report?.checks.removeAll { $0.id == "startup-new" }
                 if let r = s.report, !r.checks.contains(where: { $0.area == .startup }) {
                     s.report?.checks.append(.init("startup", .startup, .ok, "Startup items unchanged", Plural.count(r.startup.count, "item")))

@@ -84,6 +84,15 @@ public struct Snapshot: Codable, Sendable {
 enum LaunchdJobs {
     static func live() -> Set<Int32> { parse(Shell.run("/bin/launchctl", ["list"])) }
 
+    /// The labels, or nil when launchd did not answer.
+    static func labels(_ text: String?) -> Set<String>? {
+        let found = Set((text ?? "").split(separator: "\n").compactMap { line -> String? in
+            let parts = line.split(separator: "\t")
+            return parts.count == 3 && parts[2] != "Label" ? String(parts[2]) : nil
+        })
+        return found.isEmpty ? nil : found
+    }
+
     /// "PID\tStatus\tLabel"; "-" for a job that is not running.
     static func parse(_ text: String) -> Set<Int32> {
         Set(text.split(separator: "\n").compactMap { $0.split(separator: "\t").first.flatMap { Int32($0) } })

@@ -78,6 +78,10 @@ public struct StartupItem: Codable, Sendable, Equatable {
     public var label: String
     public var program: String
     public var missing: Bool
+    /// The app it lives inside. Nil for one in the folders.
+    public var app: String? = nil
+    public var loaded: Bool? = nil
+    public var signer: String? = nil
 }
 
 public struct HealthDay: Codable, Sendable, Equatable {
@@ -94,6 +98,8 @@ public struct HealthReport: Codable, Sendable {
     public var startup: [StartupItem] = []
     public var cleanup: [CleanupItem] = []
     public var wear: Int? = nil
+    /// Whether the items inside apps could be read.
+    public var readApps: Bool? = nil
 
     public init(takenAt: Date, checks: [HealthCheck], startup: [StartupItem] = [], cleanup: [CleanupItem] = []) {
         self.takenAt = takenAt; self.checks = checks; self.startup = startup; self.cleanup = cleanup
@@ -106,12 +112,15 @@ public struct HealthStore: Codable, Sendable {
     public var history: [HealthDay] = []
     /// Startup items the user already had, or accepted. Nil until the first check.
     public var knownStartup: [String]?
+    /// The same for items inside apps. Apart from the folders' list, which is older: the first check that
+    /// can see them takes them all as known, whatever the version before.
+    public var knownInApps: [String]?
     public var ignored: [String] = []
     /// When each finding was last announced, so a chronic one is not repeated at every launch.
     public var notified: [String: Date] = [:]
     /// The wording and rules the report was made with. A report from another version is taken again.
     public var rules: Int? = HealthStore.currentRules
-    public static let currentRules = 4
+    public static let currentRules = 5
 
     public init() {}
 
@@ -162,12 +171,22 @@ public struct HealthStore: Codable, Sendable {
     }
 
     public mutating func absorb(_ report: HealthReport, diskFree: UInt64, now: Date) {
-        if knownStartup == nil { knownStartup = report.startup.map(\.label) }
+        if knownStartup == nil { knownStartup = report.startup.filter { $0.app == nil }.map(\.label) }
+        if knownInApps == nil, report.readApps == true { knownInApps = report.startup.filter { $0.app != nil }.map(\.label) }
         self.report = report
         let today = Self.day(now)
         history.removeAll { $0.day == today }
         history.append(HealthDay(day: today, score: score ?? 0, diskFreeBytes: diskFree, wear: report.wear))
         history = Array(history.suffix(90))
+    }
+
+    /// The user knows what was found. An app's item is loaded now and gone tomorrow, so those add up;
+    /// one that left the folders and is back is news.
+    public mutating func acceptStartup() {
+        let items = report?.startup ?? []
+        knownStartup = items.filter { $0.app == nil }.map(\.label)
+        let inside = items.filter { $0.app != nil }.map(\.label)
+        if knownInApps != nil || report?.readApps == true { knownInApps = Array(Set((knownInApps ?? []) + inside)).sorted() }
     }
 
     /// What has not been announced in the last two weeks. Marks it as announced.
@@ -403,18 +422,19 @@ public enum HealthRules {
         return out
     }
 
-    static func startup(_ items: [StartupItem], known: [String]?) -> [HealthCheck] {
+    static func startup(_ items: [StartupItem], known: [String]?, knownInApps: [String]? = nil, readApps: Bool = true) -> [HealthCheck] {
         var out: [HealthCheck] = []
-        let fresh = known.map { k in items.filter { !k.contains($0.label) } } ?? []
+        let fresh = items.filter { i in (i.app == nil ? known : knownInApps).map { !$0.contains(i.label) } ?? false }
         if !fresh.isEmpty {
             out.append(.init("startup-new", .startup, .attention, fresh.count == 1 ? "New startup item" : "\(fresh.count) new startup items",
-                             fresh.prefix(3).map { "\($0.label)" }.joined(separator: ", "), weight: 5, fix: .acceptStartup))
+                             fresh.prefix(3).map { i in i.app.map { "\(i.label) in \($0)" } ?? i.label }.joined(separator: ", "), weight: 5, fix: .acceptStartup))
         }
         let broken = items.filter(\.missing)
         if !broken.isEmpty {
             out.append(.init("startup-broken", .startup, .attention, broken.count == 1 ? "A startup item points to a missing file" : "\(broken.count) startup items point to missing files",
                              broken.prefix(3).map { "\($0.label)" }.joined(separator: ", "), weight: 2, fix: .loginItems))
         }
+        if !readApps { out.append(unknown("startup-apps", .startup, "Startup items inside apps")) }
         return out.isEmpty ? [.init("startup", .startup, .ok, "Startup items unchanged", Plural.count(items.count, "item"))] : out
     }
 
@@ -475,7 +495,12 @@ public enum HealthProbe {
                 }
             }
         }
-        checks += HealthRules.startup(items, known: store.knownStartup)
+        let labels = LaunchdJobs.labels(tool("/bin/launchctl", ["list"]))
+        if let labels {
+            items = StartupApps.join(folders: items, apps: StartupApps.find(in: ["/Applications", NSHomeDirectory() + "/Applications"]),
+                                     loaded: labels, signer: StartupApps.signer)
+        }
+        checks += HealthRules.startup(items, known: store.knownStartup, knownInApps: store.knownInApps, readApps: labels != nil)
 
         let cleanup = Cleanup.find(home: NSHomeDirectory(), table: table, settings: settings, now: now)
         let bytes = cleanup.reduce(0) { $0 + $1.bytes }
@@ -485,6 +510,7 @@ public enum HealthProbe {
         }
         var report = HealthReport(takenAt: now, checks: checks, startup: items, cleanup: cleanup)
         report.wear = wear?.percentUsed
+        report.readApps = labels != nil
         return report
     }
 

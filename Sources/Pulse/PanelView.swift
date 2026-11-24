@@ -312,6 +312,7 @@ struct PanelView: View {
                     }
                     if !model.health.unknowns.isEmpty { plainList("Could not check", model.health.unknowns, mark: "questionmark") }
                     if !good.isEmpty { plainList("Fine", good, mark: "checkmark") }
+                    StartupTile(items: (model.health.report?.startup ?? []).filter { $0.loaded == true })
                     if !ignored.isEmpty {
                         VStack(alignment: .leading, spacing: 7) {
                             TileLabel("Ignored", count: "\(ignored.count)")

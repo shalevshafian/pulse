@@ -104,15 +104,20 @@ public enum Demo {
                                wear: DiskWear(criticalWarning: 0, spare: 99, spareThreshold: 99, percentUsed: 2, bytesWritten: 38_400_000_000_000, mediaErrors: 0), history: [])
             + HealthRules.stability([], bootedAt: now.addingTimeInterval(-4 * 86400), now: now)
             + HealthRules.performance(system)
-            + HealthRules.startup([StartupItem(label: "com.example.helper", program: "/bin/ls", missing: false)], known: nil)
+            + HealthRules.startup((1...4).map { StartupItem(label: "\($0)", program: "", missing: false) }, known: nil)
         let cleanup = [
             CleanupItem(title: "Xcode builds", detail: "Rebuilt on the next build", path: "/Users/me/Library/Developer/Xcode/DerivedData", bytes: 18 << 30, blockedBy: "Xcode"),
             CleanupItem(title: "Old build: compiler", detail: "Untouched for 41 days", path: "/Users/me/Code/compiler/target", bytes: 7 << 30, blockedBy: nil),
             CleanupItem(title: "Gradle cache", detail: "Downloaded again on the next build", path: "/Users/me/.gradle/caches", bytes: 4 << 30, blockedBy: nil),
             CleanupItem(title: "npm cache", detail: "Downloaded again on the next install", path: "/Users/me/.npm/_cacache", bytes: 2 << 30, blockedBy: nil),
         ]
-        let report = HealthReport(takenAt: now.addingTimeInterval(-40 * 60), checks: checks,
-                                  startup: [StartupItem(label: "com.example.helper", program: "/bin/ls", missing: false)], cleanup: cleanup)
+        let startup = [
+            StartupItem(label: "com.example.helper", program: "/Library/Example/helper", missing: false, loaded: true, signer: "Signed by Example Audio GmbH"),
+            StartupItem(label: "homebrew.mxcl.database", program: "/opt/homebrew/bin/database", missing: false, loaded: true, signer: "Not signed by a known developer"),
+            StartupItem(label: "com.example.vpn.login", program: "", missing: false, app: "Quiet VPN", loaded: true, signer: "Signed by Quiet Networks Inc"),
+            StartupItem(label: "com.example.backup", program: "/bin/sh", missing: false, loaded: true),
+        ]
+        let report = HealthReport(takenAt: now.addingTimeInterval(-40 * 60), checks: checks, startup: startup, cleanup: cleanup)
         s.absorb(report, diskFree: system.diskFreeBytes, now: now)
         return s
     }
