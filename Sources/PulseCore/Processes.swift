@@ -1,8 +1,11 @@
+import Darwin
 import Foundation
 
 public struct ProcInfo: Codable, Sendable, Equatable {
     public var pid: Int32
     public var ppid: Int32
+    /// What it holds: the footprint, compressed and swapped pages included, for the user's own
+    /// processes. The kernel refuses that for everyone else's, and those keep what is resident.
     public var rssBytes: UInt64
     public var cpu: Double
     /// `ps lstart` under LC_ALL=C and TZ=UTC, whitespace-normalised: "Sun Nov 22 11:20:22 2026".
@@ -42,7 +45,7 @@ public struct ProcTable: Sendable {
         return out
     }
 
-    public static func parse(_ text: String, execs: String = "") -> ProcTable {
+    public static func parse(_ text: String, execs: String = "", footprint: (Int32) -> UInt64? = { _ in nil }) -> ProcTable {
         var execByPid: [Int32: String] = [:]
         for line in execs.split(separator: "\n") {
             let parts = line.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
@@ -56,7 +59,7 @@ public struct ProcTable: Sendable {
                   let pid = Int32(parts[0]), let ppid = Int32(parts[1]),
                   let rssKB = UInt64(parts[2]), let cpu = Double(parts[3]) else { continue }
             procs.append(ProcInfo(
-                pid: pid, ppid: ppid, rssBytes: rssKB * 1024, cpu: cpu,
+                pid: pid, ppid: ppid, rssBytes: footprint(pid) ?? rssKB * 1024, cpu: cpu,
                 lstart: parts[4...8].joined(separator: " "),
                 command: parts[9].trimmingCharacters(in: .whitespaces), exec: execByPid[pid] ?? ""))
         }
@@ -65,7 +68,18 @@ public struct ProcTable: Sendable {
 
     public static func live() -> ProcTable {
         parse(Shell.run("/bin/ps", ["-axo", "pid=,ppid=,rss=,pcpu=,lstart=,command="]),
-              execs: Shell.run("/bin/ps", ["-axo", "pid=,comm="]))
+              execs: Shell.run("/bin/ps", ["-axo", "pid=,comm="]), footprint: Footprint.read)
+    }
+}
+
+/// The figure Activity Monitor and `top` call memory.
+enum Footprint {
+    static func read(_ pid: Int32) -> UInt64? {
+        var info = rusage_info_v4()
+        let ok = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { proc_pid_rusage(pid, RUSAGE_INFO_V4, $0) }
+        }
+        return ok == 0 && info.ri_phys_footprint > 0 ? info.ri_phys_footprint : nil
     }
 }
 

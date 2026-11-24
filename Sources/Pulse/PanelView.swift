@@ -520,7 +520,7 @@ struct PanelView: View {
                 HStack {
                     Text(chosen.isEmpty ? "Nothing selected" : "Close \(Plural.count(chosen.count, "row"))").font(.system(size: 13, weight: .semibold))
                     Spacer()
-                    if !chosen.isEmpty { Text(Fmt.bytes(bytes)).font(.system(size: 12, design: .monospaced)) }
+                    if !chosen.isEmpty { Text(Fmt.bytes(bytes) + " in use").font(.system(size: 12, design: .monospaced)) }
                 }
                 .foregroundStyle(Ink.base)
                 .padding(.horizontal, 18).frame(height: 40)
@@ -529,6 +529,7 @@ struct PanelView: View {
             }
             .buttonStyle(PressStyle())
             .disabled(chosen.isEmpty)
+            .help("What these hold now, compressed memory included. Closing them gives back at most that.")
         }
     }
 
