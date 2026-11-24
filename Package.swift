@@ -5,7 +5,8 @@ let package = Package(
     name: "Pulse",
     platforms: [.macOS(.v14)],
     targets: [
-        .target(name: "PulseCore"),
+        .target(name: "PulseSMART", linkerSettings: [.linkedFramework("IOKit"), .linkedFramework("CoreFoundation")]),
+        .target(name: "PulseCore", dependencies: ["PulseSMART"]),
         .executableTarget(name: "Pulse", dependencies: ["PulseCore"]),
         .testTarget(name: "PulseCoreTests", dependencies: ["PulseCore"]),
     ]

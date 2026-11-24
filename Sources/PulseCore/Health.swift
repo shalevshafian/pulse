@@ -84,6 +84,8 @@ public struct HealthDay: Codable, Sendable, Equatable {
     public var day: String
     public var score: Int
     public var diskFreeBytes: UInt64
+    /// Percent of the SSD's writing life, since the version that reads it.
+    public var wear: Int? = nil
 }
 
 public struct HealthReport: Codable, Sendable {
@@ -91,6 +93,7 @@ public struct HealthReport: Codable, Sendable {
     public var checks: [HealthCheck]
     public var startup: [StartupItem] = []
     public var cleanup: [CleanupItem] = []
+    public var wear: Int? = nil
 
     public init(takenAt: Date, checks: [HealthCheck], startup: [StartupItem] = [], cleanup: [CleanupItem] = []) {
         self.takenAt = takenAt; self.checks = checks; self.startup = startup; self.cleanup = cleanup
@@ -108,7 +111,7 @@ public struct HealthStore: Codable, Sendable {
     public var notified: [String: Date] = [:]
     /// The wording and rules the report was made with. A report from another version is taken again.
     public var rules: Int? = HealthStore.currentRules
-    public static let currentRules = 3
+    public static let currentRules = 4
 
     public init() {}
 
@@ -163,7 +166,7 @@ public struct HealthStore: Codable, Sendable {
         self.report = report
         let today = Self.day(now)
         history.removeAll { $0.day == today }
-        history.append(HealthDay(day: today, score: score ?? 0, diskFreeBytes: diskFree))
+        history.append(HealthDay(day: today, score: score ?? 0, diskFreeBytes: diskFree, wear: report.wear))
         history = Array(history.suffix(90))
     }
 
@@ -287,7 +290,7 @@ public enum HealthRules {
         return out
     }
 
-    static func disk(free: UInt64, total: UInt64, smart: String?, history: [HealthDay]) -> [HealthCheck] {
+    static func disk(free: UInt64, total: UInt64, smart: String?, wear: DiskWear? = nil, history: [HealthDay]) -> [HealthCheck] {
         var out: [HealthCheck] = []
         if total == 0 {
             out.append(unknown("disk", .storage, "Free space"))
@@ -302,7 +305,10 @@ public enum HealthRules {
                                  "Based on the last two weeks.", weight: 6, fix: .cleanup))
             }
         }
-        if let smart {
+        // Hard disks, SATA and most enclosures have no such log; for those one word from macOS stays.
+        if let wear, smart?.contains("Failing") != true {
+            out.append(Self.wear(wear))
+        } else if let smart {
             if smart.contains("SMART Status") && smart.contains("Verified") { out.append(.init("smart", .storage, .ok, "Disk hardware is fine")) }
             else if smart.contains("Failing") { out.append(.init("smart", .storage, .urgent, "The disk reports a failure", "Back up now.", weight: 30, fix: .timeMachine)) }
             else { out.append(unknown("smart", .storage, "Disk hardware")) }
@@ -455,8 +461,9 @@ public enum HealthProbe {
         checks += HealthRules.sleep(
             holders: Awake.read(table: table, sessions: ClaudeSessions.load(table: table), runtimes: runtimes),
             charge: Charge.read(), cost: SleepCost.load(), now: now)
+        let wear = DiskWear.read()
         checks += HealthRules.disk(free: system.diskFreeBytes, total: system.diskTotalBytes,
-                                   smart: tool("/usr/sbin/diskutil", ["info", "disk0"]), history: store.history)
+                                   smart: tool("/usr/sbin/diskutil", ["info", "disk0"]), wear: wear, history: store.history)
         checks += HealthRules.stability(crashes(now: now), bootedAt: bootTime(), now: now)
         checks += HealthRules.performance(system)
 
@@ -476,7 +483,9 @@ public enum HealthProbe {
             checks.append(.init("cleanup", .storage, .attention, String(format: "%.1f GB can be cleared", Double(bytes) / 1_073_741_824),
                                 "Files that are rebuilt or downloaded again.", weight: 2, fix: .cleanup))
         }
-        return HealthReport(takenAt: now, checks: checks, startup: items, cleanup: cleanup)
+        var report = HealthReport(takenAt: now, checks: checks, startup: items, cleanup: cleanup)
+        report.wear = wear?.percentUsed
+        return report
     }
 
     static func plist(_ path: String) -> [String: Any]? {

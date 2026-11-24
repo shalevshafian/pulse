@@ -85,7 +85,8 @@ public enum Demo {
         ] + HealthRules.protection(fileVault: "FileVault is On.", sip: "status: enabled", gatekeeper: "assessments enabled", firewall: "Firewall is enabled.")
             + HealthRules.battery(["AppleRawMaxCapacity": 8110, "DesignCapacity": 8579, "CycleCount": 112])
             + HealthRules.sleep(holders: snapshot(now: now).awake, charge: Charge(percent: 80, onBattery: false), cost: SleepCost(), now: now)
-            + HealthRules.disk(free: system.diskFreeBytes, total: system.diskTotalBytes, smart: "SMART Status: Verified", history: [])
+            + HealthRules.disk(free: system.diskFreeBytes, total: system.diskTotalBytes, smart: "SMART Status: Verified",
+                               wear: DiskWear(criticalWarning: 0, spare: 99, spareThreshold: 99, percentUsed: 2, bytesWritten: 38_400_000_000_000, mediaErrors: 0), history: [])
             + HealthRules.stability([], bootedAt: now.addingTimeInterval(-4 * 86400), now: now)
             + HealthRules.performance(system)
             + HealthRules.startup([StartupItem(label: "com.example.helper", program: "/bin/ls", missing: false)], known: nil)
