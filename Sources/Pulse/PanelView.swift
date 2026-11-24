@@ -84,7 +84,11 @@ struct PanelView: View {
         .onReceive(NotificationCenter.default.publisher(for: Self.goTo)) { n in
             if let next = (n.object as? String).flatMap(Page.init(rawValue:)) { go(next) }
         }
-        .onAppear { model.opened() }
+        .onAppear {
+            // Finished in the other place: the window or the menu bar panel.
+            if page == .welcome, model.settings.welcomed, model.drawsLive { page = .overview }
+            model.opened()
+        }
         .onDisappear { model.closed(); toClean = []; if page != .welcome { page = .overview }; armed = nil }
     }
 
@@ -117,7 +121,7 @@ struct PanelView: View {
             .tile()
             VStack(alignment: .leading, spacing: 9) {
                 Check(title: "Open at login", isOn: $wantsLogin)
-                Check(title: "Alert me, silently, when something needs care", isOn: $wantsAlerts)
+                Check(title: "Silent alerts when something is wrong", isOn: $wantsAlerts)
             }
             .tile()
             if !AppInfo.isInApplications {
@@ -321,7 +325,7 @@ struct PanelView: View {
             .frame(maxHeight: .infinity)
             HStack(spacing: gap) {
                 MenuTile(icon: "arrow.clockwise", title: model.checking ? "Checking…" : "Check again") { go(.overview); model.runHealthCheck(shown: true) }
-                MenuTile(icon: "shippingbox", title: "What can go") { toClean = []; go(.cleanup) }
+                MenuTile(icon: "shippingbox", title: "Cleanup") { toClean = []; go(.cleanup) }
             }
             .frame(height: 38)
             Text(model.notice ?? "\(checkedAgo). Runs by itself every six hours. Pulse changes no settings, it opens the right place.")
@@ -456,7 +460,7 @@ struct PanelView: View {
             return more >= 1 << 30 ? "Up to \(Fmt.bytes(more)) to choose from"
                 : "Press to see what can be closed"
         }
-        return "Closes " + parts.joined(separator: " and ")
+        return "Closes " + parts.joined(separator: ", ")
     }
 
     /// One row of "what is running", with its own close control. The first press arms
@@ -489,7 +493,7 @@ struct PanelView: View {
         let bytes = chosen.reduce(0) { $0 + $1.reclaimBytes }
         return Group {
             PageHeader(title: "What Optimize will do") { go(.overview) }
-            Text("Only ticked rows are closed. A working session is never closed, nor is an app that runs sessions. Closing a session stops its process; the conversation stays on disk.")
+            Text(!model.hasClaude ? "Only ticked rows are closed. An app is asked to quit, as if you quit it yourself." : "Only ticked rows are closed. A working session is never closed, nor is an app that runs sessions. Closing a session stops its process; the conversation stays on disk.")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
             ForEach(suggestions.filter { $0.kind == .advice }) { a in
@@ -637,11 +641,11 @@ struct PanelView: View {
             PageHeader(title: "Rules") { go(.overview) }
             VStack(alignment: .leading, spacing: 9) {
                 TileLabel("Ticked in advance in Optimize")
-                HStack {
-                    Text("Session idle over (hours)").font(.system(size: 12))
+                if model.hasClaude { HStack {
+                    Text("Session idle (hours)").font(.system(size: 12))
                     Spacer()
                     Choice(options: [1, 3, 6, 12, 24], value: $model.settings.autoSelectIdleHours) { "\(Int($0))" }
-                }
+                } }
                 Check(title: "Processes left by closed sessions", isOn: $model.settings.includeLeftovers)
             }
             .tile()

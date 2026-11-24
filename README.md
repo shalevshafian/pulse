@@ -1,59 +1,99 @@
 # Pulse
 
-A menu bar item for this Mac: CPU and memory in the bar, and a panel with the live
-Claude Code sessions, what can be freed, and the heaviest apps.
+A small menu bar app for the load and the health of a Mac. One panel, one button that says
+what it will do before it does it.
 
-- Build and install: `./build.sh --install`
-- Tests: `swift test`
-- Draw the panel to a PNG without opening a window: `Pulse --render out.png [--page plan|done|sessions|processes|rules|alerts|display] [--demo] [--dark]`
-- One JSON reading: `Pulse --snapshot`
+<p>
+  <img src="docs/images/overview.png" width="240" alt="The main page: health score, load, and the optimize button">
+  <img src="docs/images/health.png" width="240" alt="Mac health: what needs care, and what is fine">
+  <img src="docs/images/plan.png" width="240" alt="The plan: every row Optimize would close, ticked or not">
+</p>
+
+## What it does
+
+- **Load.** CPU, memory, heat, and every process, grouped by app, each with its own close control.
+- **Optimize.** Shows a plan first. Closes only what is ticked, and reports what happened.
+- **Health.** Backup, safety, updates, disk, battery, crashes, speed and startup items, every six hours, as one score.
+- **Cleanup.** Build and download caches that come back by themselves. To the Trash, never ticked in advance.
+- **Drives in sleep.** A drive you tick is unmounted before the Mac sleeps and mounted when it wakes.
+- **Claude Code sessions**, when Claude Code is installed: which are working, which are idle, what each one holds.
+- **Simulators, emulators and build daemons**, each as one row, shut down with their own tools.
+- **For agents.** A read-only MCP server.
+
+## Install
+
+Needs macOS 14 or later, Apple silicon or Intel.
+
+1. Download the disk image from [Releases](https://github.com/shalevshafian/pulse/releases).
+2. Drag Pulse to Applications and open it.
+
+If its icon does not fit on the menu bar, open Pulse again from Applications: the panel opens in a window.
+
+Or build it, with Xcode 16 or later:
+
+```sh
+git clone https://github.com/shalevshafian/pulse.git
+cd pulse
+./build.sh --install
+```
+
+## Privacy
+
+Pulse has no network code, no telemetry and no accounts. It asks for no administrator rights.
+It reads the process table, the sensors, the state of macOS's own tools and, if it exists,
+`~/.claude/sessions`, where it opens only the `<pid>.json` records. What it keeps is in
+`~/Library/Application Support/Pulse`.
+
+Opening a page of System Settings and the Releases link are the only things that leave the app,
+and only when pressed.
+
+## What Pulse will not do
+
+- Close anything without a click. A single row takes two presses; Optimize takes a plan and a press.
+- Close a Claude session that is working, or an app that is running one, from Optimize.
+- Close Finder, Dock, WindowServer and other core parts of macOS, or a name on your own list.
+- Signal a process by its number alone. The start time has to match, because numbers are reused.
+- Delete. Cleanup moves to the Trash, from a fixed list, and refuses what is in use.
+- Eject a drive, or force one that is in use. It stays connected and you are told what holds it.
+- Change a setting of macOS. It opens the right page.
 
 ## MCP
 
-`/Applications/Pulse.app/Contents/MacOS/Pulse --mcp` is a stdio MCP server with seven
-read-only tools: `system_usage`, `claude_sessions`, `top_cpu`, `top_memory`, `dev_runtimes`, `optimize_suggestions`, `health_report`.
-Agents can read; only a click in the panel closes anything.
+```sh
+claude mcp add --scope user pulse -- /Applications/Pulse.app/Contents/MacOS/Pulse --mcp
+```
 
-## Rules the code keeps
+Or, for any client that takes a configuration file:
 
-- A session is live only if its pid is running **and** started at the recorded `procStart`
-  (UTC). Pids are reused.
-- Only sessions whose own record says `idle` are ever closed, with SIGTERM.
-- An app that launched a live session is never offered for quitting.
-- The `.key` files in `~/.claude/sessions` are never read.
+```json
+{ "mcpServers": { "pulse": { "command": "/Applications/Pulse.app/Contents/MacOS/Pulse", "args": ["--mcp"] } } }
+```
 
-## Drives in sleep
+| Tool | Answers |
+|---|---|
+| `system_usage` | CPU, memory and pressure, swap, disk, heat |
+| `claude_sessions` | Live sessions: idle or busy, for how long, how much memory |
+| `top_cpu`, `top_memory` | What uses the machine most |
+| `dev_runtimes` | Booted simulators, emulators, build daemons |
+| `optimize_suggestions` | What could be closed. The user closes it, in the panel |
+| `health_report` | The last health check |
 
-The drives page lists external drives; a ticked one is unmounted before the Mac sleeps and mounted
-after a full wake. Nothing is ticked at first. Volumes are kept by UUID, disk images are left out.
+All are read-only.
 
-- Unmounted, never ejected and never forced. A drive in use stays, with a notification naming the holder.
-- The trigger is the kernel's sleep message, not the lid: a shut lid with a display attached is a Mac in use.
-- A dark wake, or a wake with the lid shut, connects nothing. What is owed is in `drives.json`, events in `drives.log`.
-- Real unmount and mount on a throwaway image: `PULSE_DISK_TEST=1 swift test --filter testUnmountsAndMountsARealVolume`.
+## Limits
 
-## What it recognises
+- Heat is read from sensors Apple does not document. It works on Apple silicon; on an Intel Mac the number is left out.
+- The trigger for drives is the Mac's sleep, not the lid. A closed lid with a display attached does not sleep the Mac.
+- A cable pulled before the Mac has slept cannot be helped.
+- Claude Code's session records are not a public interface and may change.
 
-- Claude sessions, each with its process tree. An idle session whose own processes still use over 25% of a core is marked as still working and is never ticked by the rules.
-- Booted iOS simulators, Android emulators and Gradle or Kotlin daemons, each as one row. Offered after an hour, never ticked by the rules. Shut down with `simctl shutdown` or `adb emu kill`; a daemon gets SIGTERM.
-- The real shutdown is tested on a throwaway simulator: `PULSE_SIM_TEST=1 swift test --filter testShutsDownARealSimulator`.
+## Development
 
-## Health
+```sh
+swift test
+swift build && .build/debug/Pulse --render page.png --page overview --demo
+scripts/release.sh
+```
 
-`HealthProbe` reads eight areas (backup, protection, updates, storage, battery, stability,
-performance, startup items) every six hours and on a press of the body. `HealthRules` turns
-each tool's text into `ok`, `attention`, `urgent` or `unknown`; a failed reading is `unknown`,
-never healthy. The app stores the result in `~/Library/Application Support/Pulse/health.json`;
-the MCP server only reads that file.
-
-- Nothing on the Mac is changed: a fix opens the right page of System Settings.
-- Cleanup offers a fixed list of caches and stale folders that carry cargo's own cache tag.
-  Nothing is ticked in advance, what is in use is locked, and everything goes to the Trash.
-- Crashes inside the iOS simulator and a daemon passing its own memory limit do not count.
-- A finding is announced once, then at most every two weeks. A solved one that returns is news.
-
-`Pulse --health` prints one check without storing it. `Pulse --body out.png` and
-`Pulse --film dir` draw the body's movements without a window.
-
-The body is drawn with Metal on its own thread (`BodyMetal.swift`), at the display rate, only while its
-window is on screen. `PULSE_WINDOW_BENCH=1 Pulse --bench-window` opens a window and prints frame times.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Licensed under the [MIT License](LICENSE).
+Pulse is an independent project, not affiliated with Apple or Anthropic.

@@ -85,15 +85,23 @@ func renderPanel(to path: String) {
     snapshotView(PanelView(model: model, page: pageArg()), to: path)
 }
 
+/// With `--2x` it draws text as a Retina display would, on any display or none.
+private final class RenderWindow: NSWindow {
+    override var backingScaleFactor: CGFloat { CommandLine.arguments.contains("--2x") ? 2 : 1 }
+}
+
 func snapshotView<V: View>(_ view: V, to path: String) {
     let host = NSHostingView(rootView: view)
     let size = host.fittingSize
     host.frame = NSRect(origin: .zero, size: size)
-    let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+    let window = RenderWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = host
     host.layoutSubtreeIfNeeded()
     RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-    guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { exit(1) }
+    let scale = Int(window.backingScaleFactor)
+    guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width) * scale, pixelsHigh: Int(size.height) * scale, bitsPerSample: 8,
+                                     samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { exit(1) }
+    rep.size = size
     host.cacheDisplay(in: host.bounds, to: rep)
     guard let png = rep.representation(using: .png, properties: [:]) else { exit(1) }
     try? png.write(to: URL(fileURLWithPath: path))

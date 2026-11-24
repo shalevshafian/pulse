@@ -1,0 +1,21 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: uname -m && swift --version
+      - run: swift test
+      - run: ./build.sh
+      # The slice of this runner really starts, and draws.
+      - run: build/Pulse.app/Contents/MacOS/Pulse --render "$RUNNER_TEMP/pulse.png" --page overview --demo

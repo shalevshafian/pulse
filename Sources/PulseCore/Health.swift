@@ -7,11 +7,11 @@ public enum HealthArea: String, Codable, CaseIterable, Sendable {
     public var title: String {
         switch self {
         case .backup: return "Backup"
-        case .protection: return "Security"
+        case .protection: return "Safety"
         case .updates: return "Updates"
-        case .storage: return "Storage"
+        case .storage: return "Disk"
         case .battery: return "Battery"
-        case .stability: return "Stability"
+        case .stability: return "Crashes"
         case .performance: return "Speed"
         case .startup: return "Startup"
         }
@@ -48,7 +48,7 @@ public enum HealthFix: String, Codable, Sendable {
         case .battery: return "Open Battery"
         case .loginItems: return "Open Login Items"
         case .storage: return "Open Storage"
-        case .cleanup: return "See what can go"
+        case .cleanup: return "See what to clear"
         case .acceptStartup: return "I know it"
         case .plan: return "Open Optimize"
         }
