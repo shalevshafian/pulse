@@ -81,3 +81,39 @@ final class FrameMeter: NSObject {
     }
     app.run()
 }
+
+/// Milliseconds of the main thread for a new page, and for a new reading on the same page. Opens no window
+/// on screen and needs no display, so it can be run anywhere.
+@MainActor func benchLayout() {
+    NSApplication.shared.setActivationPolicy(.prohibited)
+    let model = Model(live: false)
+    model.loadOnce()
+    model.checkOnce()
+    let host = NSHostingView(rootView: PanelView(model: model, page: .overview))
+    host.frame = NSRect(x: 0, y: 0, width: 320, height: 440)
+    let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+    window.contentView = host
+    host.layoutSubtreeIfNeeded()
+    let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+    func time(_ act: () -> Void) -> Double {
+        let t = CACurrentMediaTime()
+        act()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.0005))
+        host.layoutSubtreeIfNeeded()
+        return (CACurrentMediaTime() - t) * 1000
+    }
+    for p in [Page.overview, .processes, .sessions, .care, .health, .settings] {
+        var turn: [Double] = [], fresh: [Double] = []
+        for _ in 0..<15 {
+            NotificationCenter.default.post(name: PanelView.goTo, object: (p == .settings ? Page.care : .settings).rawValue)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.25))
+            turn.append(time { NotificationCenter.default.post(name: PanelView.goTo, object: p.rawValue) })
+            RunLoop.main.run(until: Date().addingTimeInterval(0.25))
+            fresh.append(time { model.snap = model.snap; model.system.cpuPercent += 0.1 })
+        }
+        host.cacheDisplay(in: host.bounds, to: rep)
+        turn.sort(); fresh.sort()
+        print(String(format: "%@: page median %.1f ms, worst %.1f; reading median %.1f ms, worst %.1f", p.rawValue, turn[7], turn[14], fresh[7], fresh[14]))
+    }
+    print("rows \(model.snap?.consumers.count ?? 0)")
+}

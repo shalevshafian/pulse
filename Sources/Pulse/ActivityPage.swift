@@ -6,6 +6,9 @@ struct ActivityPage: View {
     @ObservedObject var model: Model
     @ObservedObject var ui: PanelState
     @FocusState private var searching: Bool
+    @State private var everything = false
+    /// What is not in the first forty does close to nothing. Search looks through all of them.
+    private static let first = 40
 
     var body: some View {
         let all = model.snap?.consumers ?? []
@@ -33,7 +36,12 @@ struct ActivityPage: View {
         ScrollView {
             LazyVStack(spacing: 4) {
                 switch ui.sort {
-                case .cpu, .memory: ForEach(shown(all)) { ConsumerRow(model: model, ui: ui, consumer: $0, byMemory: ui.sort == .memory, decimals: true) }
+                case .cpu, .memory:
+                    let rows = shown(all)
+                    ForEach(everything || !ui.filter.isEmpty ? rows[...] : rows.prefix(Self.first)) { ConsumerRow(model: model, ui: ui, consumer: $0, armed: ui.armed == $0.id, byMemory: ui.sort == .memory, decimals: true) }
+                    if !everything, ui.filter.isEmpty, rows.count > Self.first {
+                        line("All \(rows.count)", icon: "chevron.down") { everything = true }.foregroundStyle(.secondary).frame(height: 24)
+                    }
                 case .hours: ForEach(past) { pastRow($0, all) }
                 case .ports: ports
                 }
@@ -130,9 +138,12 @@ private struct Meter: View {
 
 /// One row of "what is running". The row opens its page; the x closes, and only on the second press.
 struct ConsumerRow: View {
-    @ObservedObject var model: Model
-    @ObservedObject var ui: PanelState
+    // Not observed: the page that holds the rows is, and six hundred observers of one object are not free.
+    let model: Model
+    let ui: PanelState
     let consumer: Consumer
+    /// Handed over, because the row itself watches nothing.
+    let armed: Bool
     var byMemory = false
     var decimals = false
 
@@ -151,7 +162,7 @@ struct ConsumerRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain).help("What it is, and what can be done")
-            CloseControl(armed: ui.armed == c.id, allowed: model.mayClose(c), warning: model.warning(closing: c),
+            CloseControl(armed: armed, allowed: model.mayClose(c), warning: armed ? model.warning(closing: c) : nil,
                          arm: { ui.arm(c.id) }, fire: { ui.disarm(); model.close(c) })
         }
         .frame(height: 22)

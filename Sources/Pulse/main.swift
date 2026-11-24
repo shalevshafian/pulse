@@ -171,6 +171,8 @@ if args.contains("--mcp") {
     MainActor.assumeIsolated { renderFilm(to: args[i + 1]) }
 } else if args.contains("--bench-window") {
     MainActor.assumeIsolated { benchWindow() }
+} else if args.contains("--bench-layout") {
+    MainActor.assumeIsolated { benchLayout() }
 } else if args.contains("--health") {
     // One check, printed and not stored.
     let report = HealthProbe.take(system: SystemSampler().sampleBlocking(), store: .load(), settings: .load())

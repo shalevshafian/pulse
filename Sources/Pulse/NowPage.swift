@@ -24,7 +24,7 @@ struct NowPage: View {
             }
             .frame(height: 20)
             TileLabel("Using the most")
-            ForEach((model.snap?.topCPU ?? []).prefix(4)) { ConsumerRow(model: model, ui: ui, consumer: $0) }
+            ForEach((model.snap?.topCPU ?? []).prefix(4)) { ConsumerRow(model: model, ui: ui, consumer: $0, armed: ui.armed == $0.id) }
             Spacer(minLength: 0)
         } else {
             TileLabel("Needs you", count: "\(needs.count)")
@@ -36,7 +36,7 @@ struct NowPage: View {
                     }
                     if needs.count < 3 {
                         TileLabel("Using the most").padding(.top, 6)
-                        ForEach((model.snap?.topCPU ?? []).prefix(4)) { ConsumerRow(model: model, ui: ui, consumer: $0) }
+                        ForEach((model.snap?.topCPU ?? []).prefix(4)) { ConsumerRow(model: model, ui: ui, consumer: $0, armed: ui.armed == $0.id) }
                     }
                 }
             }

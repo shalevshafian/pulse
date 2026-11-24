@@ -258,27 +258,24 @@ struct Sparkline: View {
     var bars = 20
 
     var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width, h = geo.size.height
+        // One drawing instead of a view a capsule.
+        Canvas { c, size in
+            let w = size.width, h = size.height
             let thick = min(max((w - CGFloat(bars - 1) * 2) / CGFloat(bars), 2), 5)
+            let step = bars > 1 ? (w - thick) / CGFloat(bars - 1) : 0
             // Newest at the right; missing history on the left stays as faint dots.
             let padded = Array(repeating: -1.0, count: max(0, 60 - values.count)) + values.suffix(60)
             let per = max(padded.count / bars, 1)
-            HStack(alignment: .bottom, spacing: (w - thick * CGFloat(bars)) / CGFloat(bars - 1)) {
-                ForEach(0..<bars, id: \.self) { i in
-                    let chunk = padded[(i * per)..<min((i + 1) * per, padded.count)].filter { $0 >= 0 }
-                    let v = chunk.isEmpty ? -1 : chunk.reduce(0, +) / Double(chunk.count)
-                    Capsule()
-                        .fill(color.opacity(v < 0 ? 0.16 : 0.9))
-                        .frame(width: thick, height: v < 0 ? thick : max(thick, CGFloat(v) * h))
-                }
+            for i in 0..<bars {
+                let chunk = padded[(i * per)..<min((i + 1) * per, padded.count)].filter { $0 >= 0 }
+                let v = chunk.isEmpty ? -1 : chunk.reduce(0, +) / Double(chunk.count)
+                let tall = v < 0 ? thick : max(thick, CGFloat(min(v, 1)) * h)
+                let r = CGRect(x: CGFloat(i) * step, y: h - tall, width: thick, height: tall)
+                c.fill(Path(roundedRect: r, cornerRadius: thick / 2), with: .color(color.opacity(v < 0 ? 0.16 : 0.9)))
             }
-            .frame(width: w, height: h, alignment: .bottom)
         }
-        .environment(\.layoutDirection, .leftToRight)
     }
 }
-
 
 /// An x, then "Close?" in orange. Two presses to close anything.
 struct CloseControl: View {

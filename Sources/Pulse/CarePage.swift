@@ -325,7 +325,7 @@ struct HistoryPage: View {
 }
 
 struct ReceiptRow: View {
-    @ObservedObject var model: Model
+    let model: Model
     let receipt: Receipt
     /// The page of what was just done knows when it was.
     var dated = true
