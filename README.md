@@ -13,10 +13,14 @@ what it will do before it does it.
 
 - **Load.** CPU, memory, heat, and every process, grouped by app, each with its own close control.
 - **Optimize.** Shows a plan first. Closes only what is ticked, and reports what happened.
-- **Health.** Backup, safety, updates, disk, battery, crashes, speed and startup items, every six hours, as one score.
+- **The last twelve hours.** CPU time and peak memory of each row, counted while Pulse runs.
+- **Health.** Backup, safety, updates, disk wear, battery, crashes, speed and startup items (those inside apps too), every six hours, as one score.
 - **Cleanup.** Build and download caches that come back by themselves. To the Trash, never ticked in advance.
+  Under them, the largest folders of your Library, to look at only.
 - **Drives in sleep.** A drive you tick is unmounted before the Mac sleeps and mounted when it wakes.
-- **Claude Code sessions**, when Claude Code is installed: which are working, which are idle, what each one holds.
+- **Sleep.** What keeps the Mac awake, and what the last sleep cost.
+- **Claude Code sessions**, when Claude Code is installed: which wait for you, which work, which are idle, what each one holds.
+  On request, how much of the plan is used.
 - **Simulators, emulators and build daemons**, each as one row, shut down with their own tools.
 - **For agents.** A read-only MCP server.
 
@@ -42,7 +46,11 @@ cd pulse
 Pulse has no network code, no telemetry and no accounts. It asks for no administrator rights.
 It reads the process table, the sensors, the state of macOS's own tools and, if it exists,
 `~/.claude/sessions`, where it opens only the `<pid>.json` records. What it keeps is in
-`~/Library/Application Support/Pulse`.
+`~/Library/Application Support/Pulse`: settings, health, the last sleeps, and the names and CPU time of
+the last twelve hours.
+
+Plan usage is off until you tick it. Then Pulse also reads `~/.claude.json`, which holds your account too, and
+takes only the limits from it, and the end of recent files in `~/.codex/sessions`, only the lines with limits.
 
 Opening a page of System Settings and the Releases link are the only things that leave the app,
 and only when pressed.
@@ -72,11 +80,14 @@ Or, for any client that takes a configuration file:
 | Tool | Answers |
 |---|---|
 | `system_usage` | CPU, memory and pressure, swap, disk, heat |
-| `claude_sessions` | Live sessions: idle or busy, for how long, how much memory |
+| `claude_sessions` | Live sessions: idle, busy or waiting, for how long, how much memory |
 | `top_cpu`, `top_memory` | What uses the machine most |
+| `recent_load` | CPU time and peak memory of the last twelve hours |
+| `sleep_blockers` | What keeps the Mac awake, and the last sleeps |
 | `dev_runtimes` | Booted simulators, emulators, build daemons |
 | `optimize_suggestions` | What could be closed. The user closes it, in the panel |
 | `health_report` | The last health check |
+| `plan_usage` | Claude and Codex limits, only when ticked in Settings |
 
 All are read-only.
 
@@ -85,7 +96,9 @@ All are read-only.
 - Heat is read from sensors Apple does not document. It works on Apple silicon; on an Intel Mac the number is left out.
 - The trigger for drives is the Mac's sleep, not the lid. A closed lid with a display attached does not sleep the Mac.
 - A cable pulled before the Mac has slept cannot be helped.
-- Claude Code's session records are not a public interface and may change.
+- Claude Code's session records and the saved plan limits are not public interfaces and may change. What cannot be read is left out.
+- Of the startup items, only those loaded now can be seen. The full list needs an administrator.
+- Disk wear is read from the Mac's own NVMe disk. For any other, the one word macOS gives stays.
 
 ## Development
 

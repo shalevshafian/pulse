@@ -2,6 +2,7 @@
 
 ## Layout
 
+- `Sources/PulseSMART`: a few lines of C, for a disk interface Swift cannot import.
 - `Sources/PulseCore`: readings and rules. No UI. This is where the tests are.
 - `Sources/Pulse`: the menu bar app, the panel, and the body of dots (`BodyMetal.swift`, on its own thread).
 - `Pulse --mcp` is the MCP server, `--snapshot` prints one reading, `--health` one health check.
@@ -30,7 +31,7 @@ PULSE_SIM_TEST=1 swift test --filter testShutsDownARealSimulator          # a th
 ```
 
 Look at what you changed: `Pulse --render out.png --page <name> --demo`. With `--demo` everything in
-the picture is made up (`Demo.swift`), so it can be attached to a pull request. Without it, the
+the picture is made up (`Demo.swift`; `--12h` shows the processes page at its third view), so it can be attached to a pull request. Without it, the
 picture shows your own sessions and drives.
 
 ## A release
