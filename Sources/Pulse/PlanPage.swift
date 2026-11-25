@@ -11,6 +11,7 @@ struct PlanPage: View {
         let chosen = actionable.filter { ui.selected.contains($0.id) }
         let bytes = chosen.reduce(0) { $0 + ($1.score?.ramBack ?? $1.reclaimBytes) }
         PageHeader(title: "Choose what to close") { ui.back() }
+            .task { await model.keepPlanFresh() }
         VerdictTile(model: model, ui: ui)
         if actionable.isEmpty {
             Text("Nothing to close right now.").font(.system(size: 12)).foregroundStyle(.secondary).tile()
@@ -24,7 +25,8 @@ struct PlanPage: View {
             }
             .scrollFade()
             MainButton(title: chosen.isEmpty ? "Nothing selected" : what(chosen), value: chosen.isEmpty ? nil : "about " + Fmt.bytes(bytes), on: !chosen.isEmpty) {
-                model.run(chosen, shown: actionable, defaults: model.defaultSelection())
+                // Rows set by "Select the suggested" are Pulse's choice, not the user's: they teach as accepted, the rest nothing.
+                model.run(chosen, shown: actionable, defaults: ui.baseline ?? model.defaultSelection())
                 ui.replace(with: .done)
             }
             .help("What closing these is expected to give back to RAM. Other programs take and give memory at the same time.")
@@ -56,7 +58,7 @@ struct VerdictTile: View {
             }
             .buttonStyle(.plain)
             if !suggested.isEmpty, ui.selected != suggested {
-                Button { ui.selected = suggested } label: {
+                Button { ui.selected = suggested; ui.baseline = suggested } label: {
                     Text("Select the \(suggested.count == 1 ? "suggested row" : "\(suggested.count) suggested")").font(.system(size: 10, weight: .semibold)).pill()
                 }
                 .buttonStyle(PressStyle())
@@ -142,6 +144,7 @@ struct DecidesPage: View {
     var body: some View {
         let v = model.verdict
         PageHeader(title: "How Pulse chose") { ui.back() }
+            .task { await model.keepPlanFresh() }
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: gap) {
                 VStack(alignment: .leading, spacing: 7) {

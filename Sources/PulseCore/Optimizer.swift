@@ -48,6 +48,8 @@ public struct Score: Codable, Sendable, Equatable {
     public var id: String
     /// What closing it is expected to give back to RAM, after calibration.
     public var ramBack: UInt64
+    /// The same before calibration: what calibration compares the outcome with.
+    public var rawBack: UInt64 = 0
     /// How much it eases the compressor, the thing that makes macOS warn.
     public var relief: UInt64
     /// The chance it is wanted again within the horizon.
@@ -174,6 +176,7 @@ public enum Optimizer {
         let confidence = (0.3 + 0.7 * seen / (seen + 4)) * (c.compressed == nil ? 0.7 : 1)
         var s = Score(id: c.id, ramBack: UInt64(max(0, ram)), relief: UInt64(max(0, relief)), comeBack: back.p, cost: cost,
                       confidence: confidence, guards: guards, suggested: false, reasons: [])
+        s.rawBack = UInt64(max(0, (f - z) + k * z))
         s.cpuLane = c.kind == .leftover && c.cpuPercent >= 10
         s.reasons = reasons(c, s, idle: idle, seen: back.seen, cameBack: back.cameBack, horizon: horizon)
         return s

@@ -159,7 +159,8 @@ public struct PressureTracker: Sendable {
         let over = Double(r.compressor) - 0.38 * Double(r.available)
         // Short only of what comes back from disk: ten minutes of it.
         let fromSwap = min(8 * 1_073_741_824, max(0.5 * 1_073_741_824, swapinRate * 10))
-        return UInt64(max(over, swapinRate > 0 ? fromSwap : 0, state == .critical ? 1_073_741_824 : 0))
+        // macOS stops warning only once the compressor is back under 40%: while it warns, half a gigabyte at least.
+        return UInt64(max(over, swapinRate > 0 ? fromSwap : 0, state == .critical ? 1_073_741_824 : 0.5 * 1_073_741_824))
     }
 }
 

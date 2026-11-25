@@ -205,6 +205,7 @@ public struct Calibration: Codable, Sendable, Equatable {
     public struct Outcome: Codable, Sendable, Equatable {
         public var at: Date
         public var kinds: [String]
+        /// The estimate before calibration. Against the calibrated one the share would settle on its square root.
         public var promised: UInt64
         /// Memory in use fell by this much, or rose (negative).
         public var fell: Int64

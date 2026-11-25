@@ -26,7 +26,7 @@ What does comes first, with the one place where it is dealt with. The rest is a 
 **Optimize knows when closing helps.** Used memory is not a problem on a Mac: macOS keeps files in it. Pulse reads what the kernel
 itself acts on, how much the compressor holds and whether pages go to disk and back, and says "Nothing to do" when that is fine.
 When memory is short it suggests the set of rows that gives back enough with the least chance you want them soon, learned from
-when you used them, and says why in words under each row. Afterwards it measures what memory really did. How it works:
+when you used them, and says why in words for each row. Afterwards it measures what memory really did. How it works:
 [docs/OPTIMIZER.md](docs/OPTIMIZER.md).
 
 How it acts is the same everywhere: looking takes one press, closing takes two, the Trash takes a tick and a confirm.

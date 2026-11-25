@@ -250,6 +250,19 @@ final class OptimizerTests: XCTestCase {
         XCTAssertEqual(c.outcomes.count, 4)
     }
 
+    /// Fed the outcome of the uncalibrated estimate, the share settles on the true share, not on its square root.
+    func testCalibrationSettlesOnTheTrueShare() {
+        var c = Calibration()
+        for _ in 0..<60 {
+            c.record(.init(at: now, kinds: ["simulator"], promised: 4 * Self.gb, fell: Int64(2 * Self.gb), noise: 0, stateBefore: .strained, stateAfter: .calm))
+        }
+        XCTAssertEqual(c.share(of: .simulator), 0.5, accuracy: 0.01)
+    }
+
+    func testWhileMacOSWarnsThereIsAlwaysSomethingToTakeBack() {
+        XCTAssertGreaterThanOrEqual(PressureTracker.target(vm(ratio: 0.7), state: .strained), Self.gb / 2)
+    }
+
     // MARK: Readings
 
     func testCompressedSizesFromTop() {

@@ -88,7 +88,8 @@ final class OptimizerSimulationTests: XCTestCase {
             let idle = items.filter { t - $0.last >= 60 }
             let wanted = { (it: Item) in it.next - t < horizon }
             let cands = idle.map { Candidate(id: $0.id, key: key($0), kind: $0.kind, title: $0.id, footprint: $0.bytes, compressed: 0, idleHint: nil) }
-            let v = Optimizer.decide(.init(candidates: cands, vm: vm, state: .critical, memory: memory, now: now, target: target))
+            // Strained: the optimizer's horizon is the four hours regret is judged over.
+            let v = Optimizer.decide(.init(candidates: cands, vm: vm, state: .strained, memory: memory, now: now, target: target))
             let relief = Dictionary(v.scores.map { ($0.id, $0.relief) }, uniquingKeysWith: { a, _ in a })
             for s in v.scores {
                 let it = idle.first { $0.id == s.id }!
@@ -106,7 +107,7 @@ final class OptimizerSimulationTests: XCTestCase {
                 "oracle": take(idle.sorted { $0.next > $1.next }),
                 "lru": take(idle.sorted { $0.last < $1.last }),
                 "biggest": take(idle.sorted { $0.bytes > $1.bytes }),
-                // Today's order: sessions, then runtimes, then apps, each idle an hour or more, the largest first.
+                // An approximation of the order before this optimizer: sessions, then runtimes, then apps, each idle an hour or more, the largest first.
                 "today": take(idle.filter { t - $0.last >= 3600 }.sorted {
                     let a = $0.kind == .session ? 0 : $0.kind == .app ? 2 : 1, b = $1.kind == .session ? 0 : $1.kind == .app ? 2 : 1
                     return a != b ? a < b : $0.bytes > $1.bytes

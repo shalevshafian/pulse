@@ -50,7 +50,9 @@ public enum Needs {
                                 v.forecastMinutes.map { "macOS may warn in about \(Int($0.rounded())) min" } ?? "The compressor holds a lot", verb: "See", place: .plan))
             }
             for g in verdict?.growing ?? [] where !g.id.hasPrefix("session:") {
-                out.append(Need("grow:" + g.id, .know, "\(g.name) keeps growing", "\(gb(g.perHour)) an hour, \(gb(g.gained)) in \(g.minutes) min", verb: "Look", place: .row, ref: g.id))
+                // The history keeps a name; the row of a runtime is its process. Gone rows are not news.
+                guard let row = snap.consumers.first(where: { "\($0.kind.rawValue):\($0.name)" == g.id }) else { continue }
+                out.append(Need("grow:" + g.id, .know, "\(g.name) keeps growing", "\(gb(g.perHour)) an hour, \(gb(g.gained)) in \(g.minutes) min", verb: "Look", place: .row, ref: row.id))
             }
             if s.thermal == "serious" || s.thermal == "critical" {
                 let top = snap.topCPU.first

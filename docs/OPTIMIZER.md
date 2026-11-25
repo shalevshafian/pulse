@@ -43,7 +43,9 @@ leftover 65 (nothing starts it again). **Taste** is a half to two, from your cho
 opening again what it closed. Beta counts, half life a month. It never lifts a guard and never changes the target.
 
 **Guards**, any one keeps a row out of the suggestion: working; in front now or in the last fifteen minutes; plays sound or keeps the
-Mac awake; something connected to its port; Pulse could not check; you opened it again within a day. They are checked again when the button is pressed.
+Mac awake; something connected to its port; Pulse could not check; you opened it again within a day. When the button is pressed,
+two are checked again: a session must still say idle, and a simulator or build daemon that was idle must not have started working.
+An app is asked to quit, so it can still ask to save.
 
 ## 3. Which rows
 
@@ -52,12 +54,13 @@ total cost that reaches the target, by dynamic programming over 64 MB units: exa
 A leftover process using 10% of the CPU or more is suggested whatever memory does.
 
 Your rules still decide what is ticked when the plan opens. The suggestion is a mark and one press, "Select the suggested".
+What that press ticks is Pulse's choice, so it teaches only as accepted, and what it unticks teaches nothing.
 
 ## 4. Words
 
 Every sentence is made from the same numbers: "Not seen in use for 9 h. Of 11 pauses this long, 1 ended within 4 h. Gives back about
 2.8 GB to RAM. 8.9 GB is counted, most of it compressed. Way back: resume it." Counts, not percentages, while there are few.
-"How Pulse chose" on the plan shows all of it.
+They are in the tooltip of each row of the plan, and "How Pulse chose" shows all of them.
 
 ## 5. Afterwards
 
@@ -68,19 +71,20 @@ against the median of three before. Other programs move memory too, so this is a
 ## 6. Proof
 
 - `OptimizerTests`: the states and their hysteresis, the target, the forecast, the habits, taste bounds, the cover, every guard, the words.
-- `OptimizerSimulationTests`: six made-up Macs of thirty rows, three weeks each, 342 moments short of memory. Regrets are rows closed
-  and wanted within four hours, per gigabyte given back:
+- `OptimizerSimulationTests`: six made-up Macs of thirty rows, three weeks each, 342 moments strained. Regrets are rows closed
+  and wanted within four hours, the optimizer's own horizon, per gigabyte given back:
 
-  | rule | regrets per GB |
-  |---|---|
-  | knows the future | 0.016 |
-  | **Pulse** | **0.127** |
-  | least recently used | 0.215 |
-  | biggest first | 0.297 |
-  | Pulse before this | 0.344 |
-  | random | 0.763 |
+  | rule | reached the target | regrets per GB |
+  |---|---|---|
+  | knows the future | 342 | 0.016 |
+  | **Pulse** | **338** | **0.119** |
+  | least recently used | 342 | 0.215 |
+  | biggest first | 342 | 0.297 |
+  | roughly Pulse before this | 342 | 0.344 |
+  | random | 342 | 0.763 |
 
-  The learned chance is also better calibrated than the prior alone (Brier 0.187 against 0.252).
+  The four it did not reach: no row was worth its cost. The learned chance is also better calibrated than the prior alone
+  (Brier 0.117 against 0.252).
   This proves the logic when habits are what the model assumes. It does not prove a real Mac gains.
 - Each guard and bound was broken once on purpose, and a test failed each time.
 

@@ -555,6 +555,15 @@ final class Model: ObservableObject {
         }
     }
 
+    /// While the plan or its reasons are open: the compressed sizes and the clients again every forty seconds,
+    /// so the numbers do not fall back to "up to" under the user.
+    @MainActor func keepPlanFresh() async {
+        while !Task.isCancelled {
+            preparePlan()
+            try? await Task.sleep(nanoseconds: 40_000_000_000)
+        }
+    }
+
     /// Learns from what the user changed in the plan. Rows nobody touched teach nothing beyond a little.
     private func learnChoices(chosen: [Suggestion], shown: [Suggestion], defaults: Set<String>) {
         guard writes else { return }
@@ -636,6 +645,7 @@ final class Model: ObservableObject {
             return r
         }
         let promised = done.filter(\.ok).reduce(0) { $0 + $1.bytes }
+        let raw = zip(asked, done).filter { $0.1.ok }.reduce(UInt64(0)) { $0 + ($1.0.s.score?.rawBack ?? $1.0.s.reclaimBytes) }
         let kinds = Array(Set(zip(asked, done).filter { $0.1.ok }.map { Optimizer.kind($0.0.s).rawValue })).sorted()
         DispatchQueue.main.async {
             self.changeReceipts { $0.add(done) }
@@ -645,9 +655,11 @@ final class Model: ObservableObject {
                 let after = Self.median(self.usedRecent.suffix(3))
                 self.result?.memAfter = after
                 self.result?.measuring = false
-                self.result?.stateAfter = self.tracker.state
-                let outcome = Calibration.Outcome(at: Date(), kinds: kinds, promised: promised, fell: Int64(before) - Int64(after),
-                                                  noise: noise, stateBefore: stateBefore, stateAfter: self.tracker.state)
+                // This one reading, not the tracker: leaving a state takes two minutes on purpose, and this is sixteen seconds on.
+                let now = PressureTracker.instant(self.system.vm, level: self.system.memPressureLevel)
+                self.result?.stateAfter = now
+                let outcome = Calibration.Outcome(at: Date(), kinds: kinds, promised: raw, fell: Int64(before) - Int64(after),
+                                                  noise: noise, stateBefore: stateBefore, stateAfter: now)
                 if promised > 0, self.writes { self.queue.async { self.learned.calibration.record(outcome); self.learned.save() } }
                 self.refreshSnapshot()
             }

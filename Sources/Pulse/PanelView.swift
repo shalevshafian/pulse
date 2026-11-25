@@ -86,6 +86,8 @@ final class PanelState: ObservableObject {
     @Published var filter = ""
     @Published var selected: Set<String> = []
     @Published var toClean: Set<String> = []
+    /// What the plan was set to by "Select the suggested", for learning: nil while it is the rules' own.
+    var baseline: Set<String>?
     /// The row whose close was pressed once. It forgets after four seconds.
     @Published private(set) var armed: String?
     let model: Model
@@ -120,7 +122,7 @@ final class PanelState: ObservableObject {
         guard next != page else { return }
         model.notice = nil
         armed = nil
-        if next == .plan, page != .decides { selected = model.defaultSelection(); model.preparePlan() }
+        if next == .plan, page != .decides { selected = model.defaultSelection(); baseline = nil; model.preparePlan() }
         if next == .cleanup { toClean = [] }
         withAnimation(.easeOut(duration: 0.16)) {
             if Tab(root: next) != nil { stack = [next] } else if let i = stack.firstIndex(of: next) { stack = Array(stack[...i]) } else { stack.append(next) }
