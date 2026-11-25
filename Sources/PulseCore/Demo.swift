@@ -75,9 +75,11 @@ public enum Demo {
     public static func largest() -> LargeFolders {
         var f = LargeFolders()
         let home = "/Users/me/Library/"
-        f.folders = [("Developer/CoreSimulator", 31), ("Application Support/Photo Studio", 19), ("Application Support/Games", 11), ("Developer/Xcode", 6),
-                     ("Application Support/Mail Archive", 4), ("Caches/com.example.browser", 2), ("Caches/Map Tiles", 1), ("Logs/Build Server", 1)]
-            .map { .init(path: home + $0.0, bytes: UInt64($0.1) << 30 + 300 << 20) }
+        let sizes: [(String, UInt64)] = [("Developer/CoreSimulator", 31), ("Application Support/Photo Studio", 19), ("Application Support/Games", 11), ("Developer/Xcode", 6),
+                                         ("Application Support/Mail Archive", 4), ("Caches/com.example.browser", 2), ("Caches/Map Tiles", 1), ("Logs/Build Server", 1)]
+        f.folders = sizes.map { (name: String, gb: UInt64) -> LargeFolders.Folder in
+            LargeFolders.Folder(path: home + name, bytes: (gb << 30) + (300 << 20))
+        }
         f.refused = 19
         return f
     }
@@ -122,17 +124,20 @@ public enum Demo {
         s.history = [61, 61, 66, 66, 72, 70, 70, 75, 78, 78, 78, 81, 81, 78, 78].enumerated().map {
             HealthDay(day: HealthStore.day(now.addingTimeInterval(Double($0.offset - 15) * 86400)), score: $0.element, diskFreeBytes: 420_000_000_000)
         }
-        let checks: [HealthCheck] = [
+        // One list a part at a time: as one sum of eight lists, Swift 6.1 gives up type-checking it.
+        var checks: [HealthCheck] = [
             .init("backup", .backup, .attention, "Last backup was 12 days ago", "Connect the backup disk.", weight: 8, fix: .timeMachine),
             .init("update-macos", .updates, .attention, "Update waiting: macOS 26.7.3", "26.4 is installed. Offered 8 days ago.", weight: 8, fix: .softwareUpdate),
-        ] + HealthRules.protection(fileVault: "FileVault is On.", sip: "status: enabled", gatekeeper: "assessments enabled", firewall: "Firewall is enabled.")
-            + HealthRules.battery(["AppleRawMaxCapacity": 8110, "DesignCapacity": 8579, "CycleCount": 112])
-            + HealthRules.sleep(holders: snapshot(now: now).awake, charge: Charge(percent: 80, onBattery: false), cost: SleepCost(), now: now)
-            + HealthRules.disk(free: system.diskFreeBytes, total: system.diskTotalBytes, smart: "SMART Status: Verified",
-                               wear: DiskWear(criticalWarning: 0, spare: 99, spareThreshold: 99, percentUsed: 2, bytesWritten: 38_400_000_000_000, mediaErrors: 0), history: [])
-            + HealthRules.stability([], bootedAt: now.addingTimeInterval(-4 * 86400), now: now)
-            + HealthRules.performance(system)
-            + HealthRules.startup((1...4).map { StartupItem(label: "\($0)", program: "", missing: false) }, known: nil)
+        ]
+        checks += HealthRules.protection(fileVault: "FileVault is On.", sip: "status: enabled", gatekeeper: "assessments enabled", firewall: "Firewall is enabled.")
+        checks += HealthRules.battery(["AppleRawMaxCapacity": 8110, "DesignCapacity": 8579, "CycleCount": 112])
+        checks += HealthRules.sleep(holders: snapshot(now: now).awake, charge: Charge(percent: 80, onBattery: false), cost: SleepCost(), now: now)
+        let wear = DiskWear(criticalWarning: 0, spare: 99, spareThreshold: 99, percentUsed: 2, bytesWritten: 38_400_000_000_000, mediaErrors: 0)
+        checks += HealthRules.disk(free: system.diskFreeBytes, total: system.diskTotalBytes, smart: "SMART Status: Verified", wear: wear, history: [])
+        checks += HealthRules.stability([], bootedAt: now.addingTimeInterval(-4 * 86400), now: now)
+        checks += HealthRules.performance(system)
+        let items: [StartupItem] = (1...4).map { StartupItem(label: "\($0)", program: "", missing: false) }
+        checks += HealthRules.startup(items, known: nil)
         let cleanup = [
             CleanupItem(title: "Xcode builds", detail: "Rebuilt on the next build", path: "/Users/me/Library/Developer/Xcode/DerivedData", bytes: 18 << 30, blockedBy: "Xcode"),
             CleanupItem(title: "Old build: compiler", detail: "Untouched for 41 days", path: "/Users/me/Code/compiler/target", bytes: 7 << 30, blockedBy: nil),
