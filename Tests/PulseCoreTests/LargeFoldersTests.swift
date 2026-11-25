@@ -43,7 +43,7 @@ final class LargeFoldersTests: XCTestCase {
         XCTAssertFalse(f.folders.contains { $0.name == "Closed" })
         let text = "4\t/a b/x\ndu: /a b/x: Operation not permitted\ndu: /a b/y: Permission denied\n88\t/a b/z\tq\n"
         XCTAssertEqual(LargeFolders.parse(text).refused, ["/a b/x", "/a b/y"])
-        XCTAssertEqual(LargeFolders.parse(text).sizes, ["/a b/z\tq": 88 * 1024])
+        XCTAssertEqual(LargeFolders.parse(text).sizes, ["/a b/z\tq": UInt64(88 * 1024)])
     }
 
     func testLinksAndGuardedNamesAndWhatIsOfferedAboveAreNeverEntered() throws {
