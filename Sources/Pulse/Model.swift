@@ -332,7 +332,10 @@ final class Model: ObservableObject {
         gpuHistory = wave(0.14, 0.1, 3)
         loadDrivesOnce(demo: true)
         for r in Demo.receipts() { receipts.add(r) }
-        result = OptimizeResult(receipts: Set(receipts.list.prefix(4).map(\.id)), memBefore: 19 << 30, memAfter: 18 << 30)
+        // What the done page says after the plan above: what was expected, what memory did, and how macOS now sees it.
+        let closed = Array(receipts.list.prefix(4))
+        result = OptimizeResult(receipts: Set(closed.map(\.id)), memBefore: 19 << 30, memAfter: 16_400 << 20,
+                                promised: closed.filter(\.ok).reduce(0) { $0 + $1.bytes }, stateAfter: .calm)
     }
 
     /// The last page of the welcome.

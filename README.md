@@ -37,20 +37,18 @@ emulators and build daemons are shut down with their own tools; agents get a rea
 
 ## Install
 
-Needs macOS 14 or later, Apple silicon or Intel.
-
-1. Download the disk image from [Releases](https://github.com/shalevshafian/pulse/releases).
-2. Drag Pulse to Applications and open it.
-
-If its icon does not fit on the menu bar, open Pulse again from Applications: the panel opens in a window.
-
-Or build it, with Xcode 16 or later:
+Needs macOS 14 or later, Apple silicon or Intel, and Xcode 16 or later to build it:
 
 ```sh
 git clone https://github.com/shalevshafian/pulse.git
 cd pulse
 ./build.sh --install
 ```
+
+It is built for both kinds of Mac, signed for this one only, copied to Applications and opened.
+A signed and notarized disk image will be on [Releases](https://github.com/shalevshafian/pulse/releases); there is none yet.
+
+If its icon does not fit on the menu bar, open Pulse again from Applications: the panel opens in a window.
 
 ## Privacy
 
