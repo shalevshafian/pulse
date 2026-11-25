@@ -23,7 +23,7 @@ struct SleepPage: View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: gap) {
                 VStack(alignment: .leading, spacing: 6) {
-                    TileLabel("Asks this Mac to stay awake")
+                    TileLabel("Preventing sleep")
                     if rows.isEmpty {
                         Text(model.snap == nil ? "Checking…" : model.snap?.awake == nil ? "macOS did not answer" : "Nothing does").font(.system(size: 12)).foregroundStyle(.secondary)
                     }

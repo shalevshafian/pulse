@@ -55,7 +55,7 @@ final class HealthTests: XCTestCase {
 
     func testBatteryNeverReadsAboveOneHundred() {
         let c = HealthRules.battery(["AppleRawMaxCapacity": 8909, "DesignCapacity": 8579, "CycleCount": 5, "Temperature": 3068, "PermanentFailureStatus": 0])
-        XCTAssertEqual(c.map(\.title), ["Battery health 100%"])
+        XCTAssertEqual(c.map(\.title), ["Maximum capacity 100%"])
         XCTAssertEqual(HealthRules.battery(["AppleRawMaxCapacity": 6000, "DesignCapacity": 8579]).map(\.state), [.attention])
         XCTAssertEqual(HealthRules.battery(["AppleRawMaxCapacity": 8909, "DesignCapacity": 8579, "PermanentFailureStatus": 1]).map(\.state), [.urgent])
         XCTAssertEqual(HealthRules.battery([:]).map(\.state), [.ok], "a Mac without a battery")

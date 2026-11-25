@@ -11,7 +11,7 @@ final class PublicTests: XCTestCase {
         let t = ProcTable.parse("310 1 2048 0.0 Sat Nov 21 08:00:00 2026 /usr/local/bin/notes-mcp-server\n311 1 2048 0.0 Sat Nov 21 08:00:00 2026 /usr/local/bin/other-mcp-server")
         let out = Suggestions.build(system: .empty, sessions: [], apps: [], table: t, sessionPids: [], launchdJobs: [310], now: now)
         XCTAssertEqual(out.map(\.pid), [311])
-        XCTAssertTrue(out.allSatisfy { !Settings().preselects($0) }, "not ticked until the user asks for it")
+        XCTAssertTrue(out.allSatisfy { !Settings().preselects($0, memory: .strained) }, "not ticked until the user asks for it")
     }
 
     func testThisMacsLaunchdListIsReadable() {
@@ -40,7 +40,7 @@ final class PublicTests: XCTestCase {
     }
 
     func testBatteryOfAnOlderIntelMac() {
-        XCTAssertEqual(HealthRules.battery(["MaxCapacity": 4300, "DesignCapacity": 5000]).map(\.title), ["Battery health 86%"])
+        XCTAssertEqual(HealthRules.battery(["MaxCapacity": 4300, "DesignCapacity": 5000]).map(\.title), ["Maximum capacity 86%"])
         XCTAssertEqual(HealthRules.battery(["MaxCapacity": 100, "DesignCapacity": 5000]).map(\.state), [.unknown], "a percentage is not a capacity")
         XCTAssertEqual(HealthRules.battery([:]).map(\.title), ["This Mac has no battery"])
     }

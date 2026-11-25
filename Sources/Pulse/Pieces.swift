@@ -157,9 +157,9 @@ struct DriveRow: View {
 
     private var line: String {
         if !row.attached { return owed ? "Unplugged, returns when plugged in" : "Not plugged in" }
-        if !row.mounted { return owed ? "Disconnected by Pulse" : "Plugged in, not mounted" }
-        if !isOn { return "Stays connected in sleep" }
-        return row.holders.isEmpty ? "Disconnects in sleep" : "Would stay now, in use by " + holding
+        if !row.mounted { return owed ? "Unmounted by Pulse" : "Plugged in, not mounted" }
+        if !isOn { return "Stays mounted in sleep" }
+        return row.holders.isEmpty ? "Unmounts for sleep" : "Would stay now, in use by " + holding
     }
 
     var body: some View {
@@ -167,7 +167,7 @@ struct DriveRow: View {
             Check(title: row.name, isOn: $isOn)
             if owed, row.attached, !row.mounted {
                 Button(action: connect) {
-                    Text("Connect").font(.system(size: 10, weight: .semibold)).foregroundStyle(Ink.base)
+                    Text("Mount").font(.system(size: 10, weight: .semibold)).foregroundStyle(Ink.base)
                         .padding(.horizontal, 9).frame(height: 18).background(Color.primary, in: Capsule())
                 }
                 .buttonStyle(PressStyle())
@@ -471,7 +471,7 @@ struct SessionRow<Trailing: View>: View {
                 Text(session.name.isEmpty ? session.project : session.name)
                     .font(.system(size: 12)).lineLimit(1)
                 Text(session.waitingText.map { $0 + " · \(session.project)" }
-                     ?? "\(session.project) · \(source)" + (session.isIdle ? " · idle \(Fmt.duration(session.idleSeconds(now: Date())))" : " · working"))
+                     ?? "\(session.project) · \(source)" + (session.isIdle ? " · idle \(Fmt.duration(session.idleSeconds(now: Date())))" : " · " + session.stateWord.lowercased()))
                     .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 6)

@@ -32,6 +32,9 @@ public struct ClaudeSession: Codable, Sendable, Identifiable {
     public var isIdle: Bool { status == "idle" }
     /// It asked something and stands still until someone answers.
     public var isWaiting: Bool { status == "waiting" }
+    public var isWorking: Bool { status == "busy" }
+    /// A status nobody has seen yet is not called work, and is never idle.
+    public var stateWord: String { isWaiting ? "Needs input" : isIdle ? "Idle" : isWorking ? "Working" : "Status unknown" }
     /// Waiting, working, idle.
     var rank: Int { isWaiting ? 0 : isIdle ? 2 : 1 }
 
@@ -39,13 +42,13 @@ public struct ClaudeSession: Codable, Sendable, Identifiable {
     public var waitingText: String? {
         guard isWaiting else { return nil }
         switch waitingFor {
-        case "permission prompt": return "Waiting for you: permission"
-        case "input needed": return "Waiting for you: an answer"
-        case "sandbox request": return "Waiting for you: sandbox access"
-        case "dialog open": return "Waiting for you: an open dialog"
-        case "goal proposal": return "Waiting for you: a goal to approve"
-        case "worker request": return "Waiting for you: a worker's request"
-        default: return "Waiting for you"
+        case "permission prompt": return "Needs input: permission"
+        case "input needed": return "Needs input: an answer"
+        case "sandbox request": return "Needs input: sandbox access"
+        case "dialog open": return "Needs input: an open dialog"
+        case "goal proposal": return "Needs input: a goal to approve"
+        case "worker request": return "Needs input: a worker's request"
+        default: return "Needs input"
         }
     }
 

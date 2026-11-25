@@ -7,13 +7,13 @@ public enum HealthArea: String, Codable, CaseIterable, Sendable {
     public var title: String {
         switch self {
         case .backup: return "Backup"
-        case .protection: return "Safety"
+        case .protection: return "Security"
         case .updates: return "Updates"
-        case .storage: return "Disk"
+        case .storage: return "Storage"
         case .battery: return "Battery"
         case .stability: return "Crashes"
-        case .performance: return "Speed"
-        case .startup: return "Startup"
+        case .performance: return "Performance"
+        case .startup: return "Login items"
         }
     }
 }
@@ -42,15 +42,10 @@ public enum HealthFix: String, Codable, Sendable {
     public var label: String {
         switch self {
         case .timeMachine: return "Set up backup"
-        case .firewall: return "Open Firewall"
-        case .privacy: return "Open Security"
-        case .softwareUpdate: return "Open Updates"
-        case .battery: return "Open Battery"
-        case .loginItems: return "Open Login Items"
-        case .storage: return "Open Storage"
+        case .firewall, .privacy, .softwareUpdate, .battery, .loginItems, .storage: return "Open in System Settings"
         case .cleanup: return "See what to clear"
-        case .acceptStartup: return "I know it"
-        case .plan: return "Open Optimize"
+        case .acceptStartup: return "Mark as known"
+        case .plan: return "Review"
         case .sleep: return "See what it is"
         }
     }
@@ -120,7 +115,7 @@ public struct HealthStore: Codable, Sendable {
     public var notified: [String: Date] = [:]
     /// The wording and rules the report was made with. A report from another version is taken again.
     public var rules: Int? = HealthStore.currentRules
-    public static let currentRules = 7
+    public static let currentRules = 8
 
     public init() {}
 
@@ -303,9 +298,9 @@ public enum HealthRules {
         if (number(d["PermanentFailureStatus"]) ?? 0) != 0 {
             out.append(.init("battery", .battery, .urgent, "The battery reports a fault", detail, weight: 15, fix: .battery))
         } else if health < 80 {
-            out.append(.init("battery", .battery, .attention, "Battery health \(health)%", detail + ". Under 80%, consider a replacement.", weight: 8, fix: .battery))
+            out.append(.init("battery", .battery, .attention, "Maximum capacity \(health)%", detail + ". Under 80%, consider a replacement.", weight: 8, fix: .battery))
         } else {
-            out.append(.init("battery", .battery, .ok, "Battery health \(health)%", detail))
+            out.append(.init("battery", .battery, .ok, "Maximum capacity \(health)%", detail))
         }
         // Plugged in, and still losing charge. A signed figure, stored as an unsigned one.
         if (d["ExternalConnected"] as? Bool) == true, (d["IsCharging"] as? Bool) == false, let a = amperage(d), a <= -300, (number(d["CurrentCapacity"]) ?? 100) < 95 {
@@ -338,8 +333,8 @@ public enum HealthRules {
         if let wear, smart?.contains("Failing") != true {
             out.append(Self.wear(wear))
         } else if let smart {
-            if smart.contains("SMART Status") && smart.contains("Verified") { out.append(.init("smart", .storage, .ok, "Disk hardware is fine")) }
-            else if smart.contains("Failing") { out.append(.init("smart", .storage, .urgent, "The disk reports a failure", "Back up now.", weight: 30, fix: .timeMachine)) }
+            if smart.contains("SMART Status") && smart.contains("Verified") { out.append(.init("smart", .storage, .ok, "The disk reports no failure")) }
+            else if smart.contains("Failing") { out.append(.init("smart", .storage, .urgent, "The disk reports a failure", "Back up before using it further.", weight: 30, fix: .timeMachine)) }
             else { out.append(unknown("smart", .storage, "Disk hardware")) }
         } else { out.append(unknown("smart", .storage, "Disk hardware")) }
         return out
@@ -435,16 +430,16 @@ public enum HealthRules {
         var out: [HealthCheck] = []
         let fresh = items.filter { i in (i.app == nil ? known : knownInApps).map { !$0.contains(i.label) } ?? false }
         if !fresh.isEmpty {
-            out.append(.init("startup-new", .startup, .attention, fresh.count == 1 ? "New startup item" : "\(fresh.count) new startup items",
+            out.append(.init("startup-new", .startup, .attention, fresh.count == 1 ? "New login item" : "\(fresh.count) new login items",
                              fresh.prefix(3).map { i in i.app.map { "\(i.label) in \($0)" } ?? i.label }.joined(separator: ", "), weight: 5, fix: .acceptStartup))
         }
         let broken = items.filter(\.missing)
         if !broken.isEmpty {
-            out.append(.init("startup-broken", .startup, .attention, broken.count == 1 ? "A startup item points to a missing file" : "\(broken.count) startup items point to missing files",
+            out.append(.init("startup-broken", .startup, .attention, broken.count == 1 ? "A login item points to a missing file" : "\(broken.count) login items point to missing files",
                              broken.prefix(3).map { "\($0.label)" }.joined(separator: ", "), weight: 2, fix: .loginItems))
         }
-        if !readApps { out.append(unknown("startup-apps", .startup, "Startup items inside apps")) }
-        return out.isEmpty ? [.init("startup", .startup, .ok, "Startup items unchanged", Plural.count(items.count, "item"))] : out
+        if !readApps { out.append(unknown("startup-apps", .startup, "Login items inside apps")) }
+        return out.isEmpty ? [.init("startup", .startup, .ok, "No new login items", Plural.count(items.count, "item"))] : out
     }
 
     static func startupItem(_ plist: [String: Any], file: String, exists: (String) -> Bool) -> StartupItem {
@@ -514,7 +509,7 @@ public enum HealthProbe {
         let cleanup = Cleanup.find(home: NSHomeDirectory(), table: table, settings: settings, now: now)
         let bytes = cleanup.reduce(0) { $0 + $1.bytes }
         if bytes >= 5 << 30 {
-            checks.append(.init("cleanup", .storage, .attention, String(format: "%.1f GB can be cleared", Double(bytes) / 1_073_741_824),
+            checks.append(.init("cleanup", .storage, .attention, String(format: "%.1f GB of rebuildable files", Double(bytes) / 1_073_741_824),
                                 "Files that are rebuilt or downloaded again.", weight: 2, fix: .cleanup))
         }
         var report = HealthReport(takenAt: now, checks: checks, startup: items, cleanup: cleanup)

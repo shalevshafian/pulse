@@ -127,8 +127,10 @@ final class CoreTests: XCTestCase {
         func idle(_ hours: Double) -> Suggestion {
             Suggestion(kind: .idleSession, title: "x", detail: "", reclaimBytes: 1, pid: 1, procStart: nil, bundlePath: nil, idleSeconds: hours * 3600)
         }
-        XCTAssertTrue(s.preselects(idle(4)))
-        XCTAssertFalse(s.preselects(idle(2)), "under the owner's threshold a session is offered but not ticked")
+        XCTAssertTrue(s.preselects(idle(4), memory: .strained))
+        XCTAssertTrue(s.preselects(idle(4), memory: .critical))
+        for m: MemoryState? in [.calm, .tight, nil] { XCTAssertFalse(s.preselects(idle(4), memory: m), "nothing is ticked beside \"nothing to do\"") }
+        XCTAssertFalse(s.preselects(idle(2), memory: .strained), "under the owner's threshold a session is offered but not ticked")
     }
 
     func testAlertNeedsSustainedLoadAndDoesNotRepeat() {
@@ -324,13 +326,13 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(early.filter { $0.kind == .runtime }.map(\.title).sorted(), ["DCCFDB8E simulator", "Gradle 8.11.1"], "under an hour old is not offered")
 
         let settings = Settings()
-        XCTAssertTrue(out.filter { $0.kind == .runtime }.allSatisfy { !settings.preselects($0) })
+        XCTAssertTrue(out.filter { $0.kind == .runtime }.allSatisfy { !settings.preselects($0, memory: .strained) })
         let session = try XCTUnwrap(out.first { $0.kind == .idleSession })
         XCTAssertTrue(session.stillWorking)
         XCTAssertEqual(session.busyChild, "python3")
-        XCTAssertFalse(settings.preselects(session), "idle for 20 hours, but its script holds 80% of a core")
+        XCTAssertFalse(settings.preselects(session, memory: .strained), "idle for 20 hours, but its script holds 80% of a core")
         var quiet = session; quiet.stillWorking = false
-        XCTAssertTrue(settings.preselects(quiet))
+        XCTAssertTrue(settings.preselects(quiet, memory: .strained))
 
         var snap = Snapshot(system: .empty, sessions: sessions, apps: [], topCPU: [], topMemory: [], suggestions: out)
         XCTAssertEqual(Insights.headline(snap), "“work” says idle, but its python3 is still working.")

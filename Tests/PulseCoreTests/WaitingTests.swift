@@ -33,7 +33,7 @@ final class WaitingTests: XCTestCase {
         let s = ClaudeSessions.load(dir: d, table: table)
         XCTAssertEqual(s.map(\.pid), [102, 100, 101])
         XCTAssertTrue(s[0].isWaiting); XCTAssertFalse(s[0].isIdle)
-        XCTAssertEqual(s[0].waitingText, "Waiting for you: permission")
+        XCTAssertEqual(s[0].waitingText, "Needs input: permission")
         XCTAssertEqual(s[1].hosts, ["/Applications/Term.app"], "the app it runs in, through the shell between them")
         let out = Suggestions.build(system: .empty, sessions: s, apps: [], table: table, sessionPids: [], now: t0)
         XCTAssertEqual(out.map(\.pid), [101], "idle for a day is offered; waiting for a day is not")
@@ -55,8 +55,10 @@ final class WaitingTests: XCTestCase {
 
     func testUnknownWordsSayOnlyThatItWaitsOrWorks() throws {
         let s = ClaudeSessions.load(dir: try dir([record(100, "waiting", "telepathy"), record(101, "thinking"), record(102, "waiting")]), table: table)
-        XCTAssertEqual(s.first { $0.pid == 100 }?.waitingText, "Waiting for you")
-        XCTAssertEqual(s.first { $0.pid == 102 }?.waitingText, "Waiting for you")
+        XCTAssertEqual(s.first { $0.pid == 100 }?.waitingText, "Needs input")
+        XCTAssertEqual(s.first { $0.pid == 101 }?.stateWord, "Status unknown", "a new word is not called work")
+        XCTAssertEqual(s.first { $0.pid == 101 }?.isIdle, false, "and is never idle: idle rows can be closed")
+        XCTAssertEqual(s.first { $0.pid == 102 }?.waitingText, "Needs input")
         let odd = try XCTUnwrap(s.first { $0.pid == 101 })
         XCTAssertNil(odd.waitingText)
         XCTAssertFalse(odd.isIdle, "a status nobody has seen is work, not idleness")

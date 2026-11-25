@@ -26,7 +26,7 @@ public struct Need: Codable, Sendable, Equatable, Identifiable {
 
 /// Every source in one list, the costliest first. Pure: what was read goes in, rows come out.
 public enum Needs {
-    /// "Not today".
+    /// "Hide until tomorrow".
     public static let rest: TimeInterval = 24 * 3600
 
     /// A finding of health and a reading of now can be the same thing said twice.
@@ -39,12 +39,12 @@ public enum Needs {
             let s = snap.system
             if s.memPressureLevel >= 2 {
                 let top = snap.topMemory.first
-                out.append(Need("memory", .now, s.memPressureLevel >= 4 ? "Memory is critical" : "Memory is under pressure",
-                                top.map { "Biggest: \($0.name), \(gb($0.rssBytes))" } ?? "macOS is compressing and swapping", verb: "Optimize", place: .plan))
+                out.append(Need("memory", .now, s.memPressureLevel >= 4 ? "Memory pressure is high" : "Memory is under pressure",
+                                top.map { "Biggest: \($0.name), \(gb($0.rssBytes))" } ?? "macOS is compressing and swapping", verb: "Review", place: .plan))
             }
             if s.memPressureLevel < 2, let v = verdict, v.state >= .strained {
                 // macOS does not warn yet, but pages go to disk and come back every minute.
-                out.append(Need("memory", .now, "Memory is short", "Pages go to disk and come back", verb: "Optimize", place: .plan))
+                out.append(Need("memory", .now, "Memory is short", "Pages go to disk and come back", verb: "Review", place: .plan))
             } else if let v = verdict, v.state == .tight {
                 out.append(Need("memory-soon", .soon, "Memory is getting tight",
                                 v.forecastMinutes.map { "macOS may warn in about \(Int($0.rounded())) min" } ?? "The compressor holds a lot", verb: "See", place: .plan))
@@ -61,7 +61,7 @@ public enum Needs {
             }
             for w in snap.sessions where w.isWaiting {
                 out.append(Need("wait:\(w.pid)", .now, w.name.isEmpty ? w.project : w.name,
-                                (w.waitingText ?? "Waiting for you") + (w.statusSince.map { since(now.timeIntervalSince($0)) } ?? ""), verb: "Open", place: .session, ref: String(w.pid)))
+                                (w.waitingText ?? "Needs input") + (w.statusSince.map { since(now.timeIntervalSince($0)) } ?? ""), verb: "Open app", place: .session, ref: String(w.pid)))
             }
             for w in snap.sessions where w.stillWorking {
                 out.append(Need("still:\(w.pid)", .know, w.name.isEmpty ? w.project : w.name,
@@ -72,7 +72,7 @@ public enum Needs {
             }
         }
         for name in drivesOut {
-            out.append(Need("drive:" + name, .soon, "\(name) is still disconnected", "Pulse let go of it before sleep", verb: "Connect", place: .drives))
+            out.append(Need("drive:" + name, .soon, "\(name) is still unmounted", "Pulse unmounted it before sleep", verb: "Mount", place: .drives))
         }
         for p in plan {
             guard let l = p.limits.max(by: { $0.percent < $1.percent }), l.percent >= 90 else { continue }
@@ -86,9 +86,9 @@ public enum Needs {
         let free = (health.report?.cleanup ?? []).filter { $0.blockedBy == nil && !settings.isProtected($0.title, $0.path) }
         let bytes = free.reduce(0) { $0 + $1.bytes }
         if bytes >= 5 << 30, !health.ignored.contains("cleanup") {
-            out.append(Need("cleanup", .know, "\(gb(bytes)) can be cleared", "\(free[0].title)" + (free.count > 1 ? " and \(free.count - 1) more" : "") + ", built again when needed", verb: "Choose", place: .cleanup))
+            out.append(Need("cleanup", .know, "\(gb(bytes)) of rebuildable files", "\(free[0].title)" + (free.count > 1 ? " and \(free.count - 1) more" : "") + ", built again when needed", verb: "Choose", place: .cleanup))
         }
-        // A thing that is happening now keeps its place; "not today" is for what can wait.
+        // A thing that is happening now keeps its place; hiding is for what can wait.
         let kept = out.filter { n in n.id == "memory" || n.id == "heat" || hidden[n.id].map { now.timeIntervalSince($0) >= rest } ?? true }
         return kept.enumerated().sorted { $0.element.level != $1.element.level ? $0.element.level < $1.element.level : $0.offset < $1.offset }.map(\.element)
     }
@@ -97,7 +97,7 @@ public enum Needs {
         switch f {
         case .cleanup: return "Choose"
         case .acceptStartup, .sleep: return "Look"
-        case .plan: return "Optimize"
+        case .plan: return "Review"
         default: return "Open"
         }
     }

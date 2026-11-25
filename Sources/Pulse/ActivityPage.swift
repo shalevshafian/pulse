@@ -205,7 +205,7 @@ struct ProcessPage: View {
                 Hairline()
             }
             if let path = c.bundlePath ?? c.program { line("Show in Finder", icon: "arrow.up.right") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)]) }; Hairline() }
-            Check(title: "Never close this", isOn: Binding(get: { model.settings.isProtected(c.name) }, set: { model.protect(c.name, $0) }))
+            Check(title: "Never close", isOn: Binding(get: { model.settings.isProtected(c.name) }, set: { model.protect(c.name, $0) }))
         }
         .tile()
         .task(id: c.id) { model.refreshPorts(); model.showSeries(of: c) }
@@ -216,14 +216,14 @@ struct ProcessPage: View {
         switch c.kind {
         case .app: return "Quit \(c.name)"
         case .runtime: return "Shut down"
-        case .session: return "Stop session"
-        case .process: return c.processCount > 1 ? "Stop \(c.processCount) processes" : "Stop it"
+        case .session: return "Stop the session"
+        case .process: return c.processCount > 1 ? "Stop \(c.processCount) processes" : "Stop"
         }
     }
 
     /// Said before the press, not after.
     private func consequence(_ c: Consumer) -> String {
-        guard model.mayClose(c) else { return "macOS needs it, or your rules protect it. Pulse will not close it." }
+        guard model.mayClose(c) else { return "macOS needs it, or it is on your Never close list. Pulse will not close it." }
         switch c.kind {
         case .app: return "It is asked to quit, as if you did it, and may ask you to save."
         case .runtime: return "Shut down with its own tool. Its data stays."
@@ -256,7 +256,7 @@ private struct BusyTile: View {
     var body: some View {
         let top = max(series.compactMap { $0 }.max() ?? 1, 1)
         VStack(alignment: .leading, spacing: 6) {
-            TileLabel("When it was busy")
+            TileLabel("CPU time")
             GeometryReader { g in
                 let step = g.size.width / CGFloat(series.count)
                 HStack(alignment: .bottom, spacing: step * 0.4) {
@@ -298,9 +298,10 @@ struct SessionsPage: View {
 
     var body: some View {
         let list = model.snap?.sessions ?? []
-        let waits = list.filter(\.isWaiting).count, idle = list.filter(\.isIdle).count
-        PageHeader(title: "Claude sessions", count: list.count, back: nil)
-        Text(list.isEmpty ? "None is open." : "\(waits) waiting, \(list.count - waits - idle) working, \(idle) idle. They hold \(Fmt.bytes(list.reduce(0) { $0 + $1.rssBytes })).")
+        let waits = list.filter(\.isWaiting).count, idle = list.filter(\.isIdle).count, working = list.filter(\.isWorking).count
+        let unknown = list.count - waits - idle - working
+        PageHeader(title: "Sessions", count: list.count, back: nil)
+        Text(list.isEmpty ? "No Claude Code session is open." : "Claude Code: \(waits) \(waits == 1 ? "needs" : "need") input, \(working) working, \(idle) idle\(unknown > 0 ? ", \(unknown) unknown" : ""). \(Fmt.bytes(list.reduce(0) { $0 + $1.rssBytes })) in all.")
             .font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 2)
         PlanUsageTile(model: model)
         if !list.isEmpty {
@@ -310,7 +311,7 @@ struct SessionsPage: View {
                         let consumer = model.snap?.consumers.first { $0.kind == .session && $0.members.first?.pid == session.pid }
                         SessionRow(session: session, open: { (consumer?.id).map(ui.openRow) }) {
                             if session.isWaiting {
-                                Button { model.showHost(of: session) } label: { Text("Open").font(.system(size: 10, weight: .semibold)).fixedSize().pill() }
+                                Button { model.showHost(of: session) } label: { Text("Open app").font(.system(size: 10, weight: .semibold)).fixedSize().pill() }
                                     .buttonStyle(PressStyle()).help("Bring the app it runs in to the front")
                             } else if !session.isIdle {
                                 // A working one is stopped from its own page only.
@@ -330,7 +331,7 @@ struct SessionsPage: View {
         if let notice = model.notice {
             NoticeLine(text: notice)
         } else if !model.settings.planUsage {
-            line("Show how much of the plan is used", icon: "chevron.right") { ui.go(.display) }.foregroundStyle(.secondary).padding(.horizontal, 4)
+            line("Show plan limits", icon: "chevron.right") { ui.go(.display) }.foregroundStyle(.secondary).padding(.horizontal, 4)
         }
     }
 }

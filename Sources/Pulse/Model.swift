@@ -434,7 +434,7 @@ final class Model: ObservableObject {
                 s.acceptStartup()
                 s.report?.checks.removeAll { $0.id == "startup-new" }
                 if let r = s.report, !r.checks.contains(where: { $0.area == .startup }) {
-                    s.report?.checks.append(.init("startup", .startup, .ok, "Startup items unchanged", Plural.count(r.startup.count, "item")))
+                    s.report?.checks.append(.init("startup", .startup, .ok, "No new login items", Plural.count(r.startup.count, "item")))
                 }
             }
         }
@@ -524,10 +524,12 @@ final class Model: ObservableObject {
         var stateAfter: MemoryState?
     }
 
-    /// The rows the plan starts with ticked, by the user's rules.
+    /// The rows the plan starts with ticked: by the user's rules, and only while memory is short.
     func defaultSelection() -> Set<String> {
-        Set((snap?.suggestions ?? []).filter { settings.preselects($0) }.map(\.id))
+        Set((snap?.suggestions ?? []).filter(preselects).map(\.id))
     }
+
+    func preselects(_ s: Suggestion) -> Bool { settings.preselects(s, memory: verdict?.state) }
 
     func changeReceipts(_ change: (inout Receipts) -> Void) {
         change(&receipts)
@@ -760,7 +762,7 @@ final class Model: ObservableObject {
         g.onRefused = { [weak self] list in
             DispatchQueue.main.async {
                 for r in list {
-                    self?.post(PulseAlert(key: "drive:" + r.drive.id, title: "\(r.drive.name) was not disconnected",
+                    self?.post(PulseAlert(key: "drive:" + r.drive.id, title: "\(r.drive.name) was not unmounted",
                                           body: r.holders.isEmpty ? "Something is using it. Do not pull the cable." : "In use by \(r.holders.prefix(3).joined(separator: ", ")). Do not pull the cable."))
                 }
             }
@@ -768,7 +770,7 @@ final class Model: ObservableObject {
         g.onStillOut = { [weak self] list in
             DispatchQueue.main.async {
                 for d in list {
-                    self?.post(PulseAlert(key: "driveout:" + d.id, title: "\(d.name) did not come back", body: "It is plugged in but did not mount. Try again on the drives page."))
+                    self?.post(PulseAlert(key: "driveout:" + d.id, title: "\(d.name) did not come back", body: "It is plugged in but did not mount. Mount it from Care, Unmount drives for sleep."))
                 }
             }
         }
@@ -859,8 +861,8 @@ final class Model: ObservableObject {
     }
 
     func sendTestAlert() {
-        post(PulseAlert(key: "test", title: "Pulse", body: "This is how an alert looks."))
-        notice = canNotify ? "Test alert sent" : "Alerts only work from the installed app"
+        post(PulseAlert(key: "test", title: "Pulse", body: "This is how a notification looks."))
+        notice = canNotify ? "Test notification sent" : "Notifications only work from the installed app"
     }
 
     private func post(_ alert: PulseAlert) {

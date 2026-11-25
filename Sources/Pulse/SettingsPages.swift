@@ -15,16 +15,16 @@ struct SettingsPage: View {
         VStack(spacing: 9) {
             row("Menu bar", model.barText.isEmpty ? "Icon only" : model.barText) { ui.go(.display) }
             Hairline()
-            row("Alerts", alerts == 0 ? "Off" : "\(alerts) on") { ui.go(.alerts) }
+            row("Notifications", alerts == 0 ? "Off" : "\(alerts) on") { ui.go(.alerts) }
             Hairline()
-            row("Rules", s.neverTouch.isEmpty ? "" : "\(s.neverTouch.count) protected") { ui.go(.rules) }
+            row("Closing", s.neverTouch.isEmpty ? "" : "\(s.neverTouch.count) never closed") { ui.go(.rules) }
         }
         .tile()
         VStack(alignment: .leading, spacing: 9) {
             Check(title: "Open at login", isOn: Binding(get: { model.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
             Hairline()
             HStack(spacing: 4) {
-                Text("Shortcut").font(.system(size: 12))
+                Text("Keyboard shortcut").font(.system(size: 12))
                 Spacer()
                 ForEach(PulseCore.Settings.Shortcut.allCases, id: \.self) { k in
                     Button { model.settings.shortcut = k } label: {
@@ -42,7 +42,7 @@ struct SettingsPage: View {
         }
         .tile()
         VStack(alignment: .leading, spacing: 9) {
-            line("Connect an agent", icon: "chevron.right") { ui.go(.agents) }
+            line("Connect an agent (MCP)", icon: "chevron.right") { ui.go(.agents) }
                 .help("Pulse is also a read-only MCP server: Claude Code, Codex and others can see this Mac, and cannot close or change anything.")
             Hairline()
             line("Source and updates", icon: "arrow.up.right") { NSWorkspace.shared.open(AppInfo.releases) }
@@ -90,7 +90,7 @@ struct DisplayPage: View {
                     TileLabel("Beside the icon")
                     Check(title: "CPU", isOn: $model.settings.barCPU)
                     Check(title: "Memory", isOn: $model.settings.barMemory)
-                    if model.system.chipTempC != nil { Check(title: "Heat", isOn: $model.settings.barTemp) }
+                    if model.system.chipTempC != nil { Check(title: "Temperature", isOn: $model.settings.barTemp) }
                     if model.hasClaude { Check(title: "Number of sessions", isOn: $model.settings.barSessions) }
                     Hairline()
                     HStack {
@@ -102,8 +102,8 @@ struct DisplayPage: View {
                 .tile()
                 if model.hasClaude {
                     VStack(alignment: .leading, spacing: 9) {
-                        TileLabel("On the Claude page")
-                        Check(title: "How much of the plan is used", isOn: $model.settings.planUsage)
+                        TileLabel("On the Sessions page")
+                        Check(title: "Plan limits", isOn: $model.settings.planUsage)
                         Text("Reads the limits Claude Code and Codex already saved on this Mac. Nothing is sent. Claude Code keeps them in ~/.claude.json, which also holds your account; Pulse takes only the limits from it and keeps nothing.")
                             .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
@@ -119,7 +119,7 @@ struct AlertsPage: View {
     @ObservedObject var ui: PanelState
 
     var body: some View {
-        PageHeader(title: "Alerts") { ui.back() }
+        PageHeader(title: "Notifications") { ui.back() }
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: gap) {
                 VStack(alignment: .leading, spacing: 9) {
@@ -132,7 +132,7 @@ struct AlertsPage: View {
                 // An Intel Mac has no readable sensor: an alert that cannot come is not offered.
                 if model.system.chipTempC != nil {
                     VStack(alignment: .leading, spacing: 9) {
-                        TileLabel("Heat")
+                        TileLabel("Temperature")
                         Check(title: "When the chip is hot", isOn: $model.settings.alertTemp)
                         choice("Over", [80, 85, 90, 95], $model.settings.alertTempC) { "\(Int($0))°" }
                     }
@@ -143,7 +143,7 @@ struct AlertsPage: View {
                     Check(title: "When memory comes under pressure", isOn: $model.settings.alertMemory)
                     Check(title: "When something keeps growing", isOn: $model.settings.alertGrowth)
                     Check(title: "When a check finds something new", isOn: $model.settings.alertHealth)
-                    if model.hasClaude { Check(title: "When a session waits for you", isOn: $model.settings.alertWaiting) }
+                    if model.hasClaude { Check(title: "When a session needs input", isOn: $model.settings.alertWaiting) }
                 }
                 .tile()
             }
@@ -155,7 +155,7 @@ struct AlertsPage: View {
                 : "Silent. Once every half hour at most, or per wait."))
                 .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 6)
-            Button("Test") { model.requestNotifications(); model.sendTestAlert() }
+            Button("Send test notification") { model.requestNotifications(); model.sendTestAlert() }
                 .buttonStyle(.plain).font(.system(size: 11, weight: .medium))
         }
         .padding(.horizontal, 4)
@@ -176,11 +176,11 @@ struct RulesPage: View {
     @State private var newWord = ""
 
     var body: some View {
-        PageHeader(title: "Rules") { ui.back() }
+        PageHeader(title: "Closing") { ui.back() }
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: gap) {
                 VStack(alignment: .leading, spacing: 9) {
-                    TileLabel("Ticked in advance in Optimize")
+                    TileLabel("Selected for you, when memory is short")
                     if model.hasClaude { HStack {
                         Text("Session idle (hours)").font(.system(size: 12))
                         Spacer()
@@ -190,7 +190,7 @@ struct RulesPage: View {
                 }
                 .tile()
                 VStack(alignment: .leading, spacing: 8) {
-                    TileLabel("Never touch")
+                    TileLabel("Never close")
                     Text("A name with one of these words is never offered and never closed, not even by hand.")
                         .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     ForEach(model.settings.neverTouch, id: \.self) { word in
@@ -220,7 +220,7 @@ struct RulesPage: View {
                     Button("Forget it") { model.forgetLearned() }.buttonStyle(.plain).font(.system(size: 11, weight: .medium))
                 }
                 .tile()
-                Text("Always protected, whatever the rules: Finder, Dock, WindowServer and the other core parts of macOS, and Pulse itself.")
+                Text("Always protected, whatever you choose: Finder, Dock, WindowServer and the other core parts of macOS, and Pulse itself.")
                     .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
             }
         }

@@ -1,6 +1,8 @@
 # Names, structure and wording: what was found, 25 November 2026
 
-UNCONFIRMED marks are kept. Nothing here is a decision; the names in use are in the code.
+UNCONFIRMED marks are kept. The owner approved the names in section 1 and the strings in "Replace existing strings" on 25 November 2026, and they are in the code.
+Not taken: Care is still 8 rows (section 2, point 3), Battery has no page of its own (point 4), "All good" became "Nothing urgent" rather than "Nothing needs you",
+so it cannot sit above a "Needs you" list, and "Resume" kept its word (its button already copies the command).
 
 Pulse naming, structure and wording research. Pulse strings were read from source at commit 9d214a8; no code was edited and nothing was rendered.
 

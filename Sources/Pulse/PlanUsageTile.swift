@@ -8,8 +8,9 @@ struct PlanUsageTile: View {
     var body: some View {
         if model.settings.planUsage {
             VStack(alignment: .leading, spacing: 8) {
+                TileLabel("Plan limits")
                 if model.plan.isEmpty {
-                    Text("No recent reading of a plan on this Mac").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text("No recent reading on this Mac").font(.system(size: 11)).foregroundStyle(.secondary)
                 }
                 ForEach(model.plan) { row($0) }
             }

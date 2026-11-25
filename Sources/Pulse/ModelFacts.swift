@@ -20,11 +20,10 @@ extension Model {
     /// What the rules tick comes first, then the biggest: 10 GB of simulator is not left under the fold.
     var actionable: [Suggestion] {
         (snap?.suggestions ?? []).filter { $0.kind != .advice }.sorted {
-            let a = settings.preselects($0), b = settings.preselects($1)
+            let a = preselects($0), b = preselects($1)
             return a != b ? a : $0.reclaimBytes > $1.reclaimBytes
         }
     }
-    var defaults: [Suggestion] { (snap?.suggestions ?? []).filter { settings.preselects($0) } }
 
     var checkedAgo: String {
         let age = healthAge(now: Date())
@@ -41,7 +40,7 @@ extension Model {
 
     /// What closing would interrupt, in a word or two.
     func warning(closing c: Consumer) -> String? {
-        if let s = session(of: c) { return s.isWaiting ? "Waits" : s.isIdle && !s.stillWorking ? nil : "Working" }
+        if let s = session(of: c) { return s.isWaiting ? "Needs input" : s.isIdle && !s.stillWorking ? nil : "Working" }
         if hostsSessions(c) { return "Runs sessions" }
         return snap?.runtimes.first { $0.id == c.runtimeID }?.working == true ? "Working" : nil
     }
@@ -50,7 +49,7 @@ extension Model {
         switch c.kind {
         case .session:
             guard let s = session(of: c) else { return nil }
-            return "A Claude Code session in \(s.project). " + (s.waitingText ?? (s.isIdle ? "Idle for \(Fmt.duration(s.idleSeconds(now: Date())))" + (s.stillWorking ? ", but something in it works." : ".") : "Working."))
+            return "A Claude Code session in \(s.project). " + (s.waitingText ?? (s.isIdle ? "Idle for \(Fmt.duration(s.idleSeconds(now: Date())))" + (s.stillWorking ? ", but something in it works." : ".") : s.stateWord + "."))
         case .runtime: return snap?.runtimes.first { $0.id == c.runtimeID }.map { r in
             switch r.kind {
             case .simulator: return "An iOS simulator. Shutting it down keeps its data."
@@ -96,7 +95,7 @@ extension Model {
         }
         settings.neverTouch.removeAll { $0.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(name) == .orderedSame }
         if let word = settings.neverTouch.first(where: { w in name.lowercased().contains(w.trimmingCharacters(in: .whitespaces).lowercased()) && !w.isEmpty }) {
-            notice = "Protected by the word \u{201C}\(word)\u{201D} in Rules"
+            notice = "Protected by the word \u{201C}\(word)\u{201D} in Closing"
         }
     }
 

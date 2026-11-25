@@ -4,7 +4,7 @@ A small menu bar app that answers one question: is there anything on this Mac th
 What does comes first, with the one place where it is dealt with. The rest is a press away.
 
 <p>
-  <img src="docs/images/overview.png" width="240" alt="Now: the score, four figures, and what needs you">
+  <img src="docs/images/overview.png" width="240" alt="Overview: the score, four figures, and what needs you">
   <img src="docs/images/processes.png" width="240" alt="Activity: live meters and every row">
   <img src="docs/images/process.png" width="240" alt="One program: what it is, what it costs, when it was busy">
 </p>
@@ -16,12 +16,12 @@ What does comes first, with the one place where it is dealt with. The rest is a 
 
 ## Five places
 
-- **Now.** A score, four figures, and one list: sessions that wait, pressure, heat, findings, space. The costliest first, "Not today" for what can wait.
+- **Overview.** A health score, four figures, and one list: sessions that need input, memory pressure, heat, findings, space. The costliest first, "Hide until tomorrow" for what can wait.
 - **Activity.** Live CPU, memory, graphics and network. Every row now, over the last twelve hours, or by its open port.
   A row has a page: what it is, what it costs, when it was busy, what it listens on, and what closing it would lose.
-- **Claude**, when Claude Code is installed. Sessions that wait for you, work or idle; on request, how much of the plan is used.
-- **Care.** Health every six hours, cleanup, disk and its wear, sleep, drives, battery, startup items and who signed them, and the history of what Pulse did.
-- **Settings.** What the menu bar shows, silent alerts, rules, a shortcut key.
+- **Sessions**, when Claude Code is installed. Its sessions by state: needs input, working, idle, or status unknown; on request, plan limits.
+- **Care.** A health check every six hours, cleanup, storage and SSD wear, sleep, drives to unmount for sleep, battery, login items and who signed them, and the history of what Pulse did.
+- **Settings.** What the menu bar shows, silent notifications, closing rules, a keyboard shortcut, connecting an agent.
 
 **Optimize knows when closing helps.** Used memory is not a problem on a Mac: macOS keeps files in it. Pulse reads what the kernel
 itself acts on, how much the compressor holds and whether pages go to disk and back, and says "Nothing to do" when that is fine.
@@ -60,7 +60,7 @@ It reads the process table, the sensors, the state of macOS's own tools and, if 
 `~/Library/Application Support/Pulse`: settings, health, the last sleeps, the last hundred
 things you had it close or clear, the names and CPU time of the last twelve hours, and what Optimize learned
 (`learned.json`: names of apps, session folders and simulators, when they were in use, your ticks, and how earlier closes
-came out). Settings, Rules, "Forget it" clears what was learned.
+came out). Settings, Closing, "Forget it" clears what was learned.
 
 Plan usage is off until you tick it. Then Pulse also reads `~/.claude.json`, which holds your account too, and
 takes only the limits from it, and the end of recent files in `~/.codex/sessions`, only the lines with limits.

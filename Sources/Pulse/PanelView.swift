@@ -11,31 +11,31 @@ enum Page: String {
 
 /// The five places everything is in. Always in sight, always named.
 enum Tab: CaseIterable {
-    case now, activity, claude, care, settings
+    case overview, activity, sessions, care, settings
 
     var root: Page {
         switch self {
-        case .now: return .overview
+        case .overview: return .overview
         case .activity: return .processes
-        case .claude: return .sessions
+        case .sessions: return .sessions
         case .care: return .care
         case .settings: return .settings
         }
     }
     var title: String {
         switch self {
-        case .now: return "Now"
+        case .overview: return "Overview"
         case .activity: return "Activity"
-        case .claude: return "Claude"
+        case .sessions: return "Sessions"
         case .care: return "Care"
         case .settings: return "Settings"
         }
     }
     var icon: String {
         switch self {
-        case .now: return "circle.dotted"
+        case .overview: return "circle.dotted"
         case .activity: return "chart.bar.fill"
-        case .claude: return "text.bubble"
+        case .sessions: return "text.bubble"
         case .care: return "stethoscope"
         case .settings: return "slider.horizontal.3"
         }
@@ -86,8 +86,8 @@ final class PanelState: ObservableObject {
     @Published var filter = ""
     @Published var selected: Set<String> = []
     @Published var toClean: Set<String> = []
-    /// What the plan was set to by "Select the suggested", for learning: nil while it is the rules' own.
-    var baseline: Set<String>?
+    /// What Pulse itself ticked: the rules when the plan opened, or "Select the suggested". The rest is the user's, and teaches.
+    @Published var baseline: Set<String> = []
     /// The row whose close was pressed once. It forgets after four seconds.
     @Published private(set) var armed: String?
     let model: Model
@@ -96,6 +96,7 @@ final class PanelState: ObservableObject {
         self.model = model
         stack = [page]
         selected = model.defaultSelection()
+        baseline = selected
         // A page deeper than a root has its root to go back to.
         if Tab(root: page) == nil, page != .welcome { stack = [Self.home(of: page), page] }
         row = page == .process ? model.snap?.topCPU.first?.id : nil
@@ -106,7 +107,7 @@ final class PanelState: ObservableObject {
     }
 
     var page: Page { stack.last ?? .overview }
-    var tab: Tab { Tab(root: stack.first ?? .overview) ?? .now }
+    var tab: Tab { Tab(root: stack.first ?? .overview) ?? .overview }
 
     static func home(of page: Page) -> Page {
         switch page {
@@ -122,7 +123,7 @@ final class PanelState: ObservableObject {
         guard next != page else { return }
         model.notice = nil
         armed = nil
-        if next == .plan, page != .decides { selected = model.defaultSelection(); baseline = nil; model.preparePlan() }
+        if next == .plan, page != .decides { selected = model.defaultSelection(); baseline = selected; model.preparePlan() }
         if next == .cleanup { toClean = [] }
         withAnimation(.easeOut(duration: 0.16)) {
             if Tab(root: next) != nil { stack = [next] } else if let i = stack.firstIndex(of: next) { stack = Array(stack[...i]) } else { stack.append(next) }
@@ -217,7 +218,7 @@ struct PanelView: View {
     @ViewBuilder private var content: some View {
         switch ui.page {
         case .welcome: WelcomePage(model: model, ui: ui)
-        case .overview: NowPage(model: model, ui: ui)
+        case .overview: OverviewPage(model: model, ui: ui)
         case .processes: ActivityPage(model: model, ui: ui)
         case .process: ProcessPage(model: model, ui: ui)
         case .sessions: SessionsPage(model: model, ui: ui)
@@ -251,7 +252,7 @@ private struct TabBar: View {
         VStack(spacing: 0) {
             Hairline()
             HStack(spacing: 0) {
-                ForEach(Tab.allCases.filter { $0 != .claude || model.hasClaude }, id: \.self) { tab in
+                ForEach(Tab.allCases.filter { $0 != .sessions || model.hasClaude }, id: \.self) { tab in
                     Item(title: tab.title, icon: tab.icon, on: ui.tab == tab, mark: mark(tab, needs)) { ui.go(tab.root) }
                 }
             }
@@ -263,7 +264,7 @@ private struct TabBar: View {
     private func mark(_ tab: Tab, _ needs: [Need]) -> Color? {
         func of(_ list: [Need]) -> Color? { list.isEmpty ? nil : list.contains { $0.level == .now } ? Ink.hot : Ink.ink(.dark) }
         switch tab {
-        case .claude: return of(needs.filter { $0.place == .session })
+        case .sessions: return of(needs.filter { $0.place == .session })
         case .care: return of(needs.filter { [.health, .drives].contains($0.place) && $0.level != .know })
         default: return nil
         }
@@ -303,7 +304,7 @@ private struct Keys: View, Equatable {
     static func == (a: Keys, b: Keys) -> Bool { a.ui === b.ui }
 
     var body: some View {
-        let tabs = Tab.allCases.filter { $0 != .claude || model.hasClaude }
+        let tabs = Tab.allCases.filter { $0 != .sessions || model.hasClaude }
         ZStack {
             ForEach(Array(tabs.enumerated()), id: \.offset) { i, tab in
                 Button("") { ui.go(tab.root) }.keyboardShortcut(KeyEquivalent(Character("\(i + 1)")), modifiers: .command)

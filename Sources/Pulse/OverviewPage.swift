@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The first page answers one question: is there anything to do? The score and the body, the four
 /// figures, then what needs a person, the costliest first. One button does the closing.
-struct NowPage: View {
+struct OverviewPage: View {
     @ObservedObject var model: Model
     @ObservedObject var ui: PanelState
 
@@ -23,7 +23,7 @@ struct NowPage: View {
                 Spacer()
             }
             .frame(height: 20)
-            TileLabel("Using the most")
+            TileLabel("Most CPU now")
             ForEach((model.snap?.topCPU ?? []).prefix(4)) { ConsumerRow(model: model, ui: ui, consumer: $0, armed: ui.armed == $0.id) }
             Spacer(minLength: 0)
         } else {
@@ -35,7 +35,7 @@ struct NowPage: View {
                             .transition(.asymmetric(insertion: .opacity, removal: .move(edge: .leading).combined(with: .opacity)))
                     }
                     if needs.count < 3 {
-                        TileLabel("Using the most").padding(.top, 6)
+                        TileLabel("Most CPU now").padding(.top, 6)
                         ForEach((model.snap?.topCPU ?? []).prefix(4)) { ConsumerRow(model: model, ui: ui, consumer: $0, armed: ui.armed == $0.id) }
                     }
                 }
@@ -99,7 +99,7 @@ struct NowPage: View {
                 BodyView(model: model).frame(width: 112, height: 112).contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .help("Press to check everything again")
+            .help("Check now")
             .accessibilityLabel("Check the health of this Mac")
         }
         .frame(height: 112)
@@ -109,8 +109,8 @@ struct NowPage: View {
         if model.checking { return "Checking…" }
         guard model.health.report != nil else { return "Not checked yet" }
         let now = needs.filter { $0.level == .now }.count, soon = needs.filter { $0.level == .soon }.count
-        if now > 0 { return "\(Plural.count(now, "thing")) cannot wait" }
-        return soon > 0 ? "\(Plural.count(soon, "thing")) to look at" : "All good"
+        if now > 0 { return now == 1 ? "1 thing needs you now" : "\(now) things need you now" }
+        return soon > 0 ? "\(Plural.count(soon, "thing")) to look at" : "Nothing urgent"
     }
 
     /// Always the one thing Pulse itself can do now.
@@ -121,7 +121,7 @@ struct NowPage: View {
         let closes = !model.actionable.isEmpty
         Button { if closes { ui.go(.plan) } else { model.runHealthCheck(shown: true) } } label: {
             HStack(spacing: 7) {
-                Text(closes ? "Optimize" : "Check now").font(.system(size: 12, weight: .semibold))
+                Text(closes ? "Optimize…" : "Check now").font(.system(size: 12, weight: .semibold))
                 if closes, bytes > 0 { Text(Fmt.bytes(bytes)).font(.system(size: 11, weight: .medium, design: .monospaced)).opacity(0.65) }
             }
             .foregroundStyle(Ink.base)
@@ -138,14 +138,14 @@ struct NowPage: View {
         return HStack(spacing: 0) {
             Button { ui.activity(.cpu) } label: { Metric("CPU", String(format: "%.0f%%", s.cpuPercent), hot: s.cpuPercent >= 85) }.buttonStyle(PressStyle())
             Button { ui.activity(.memory) } label: { Metric("Memory", String(format: "%.0f%%", s.memPercent), hot: s.memPressureLevel >= 2) }.buttonStyle(PressStyle())
-                .help("\(Fmt.bytes(s.memUsedBytes)) of \(Fmt.bytes(s.memTotalBytes)). Pressure \(s.memPressureLevel >= 4 ? "critical" : s.memPressureLevel >= 2 ? "high" : "normal"), swap \(Fmt.bytes(s.swapUsedBytes))")
+                .help("\(Fmt.bytes(s.memUsedBytes)) of \(Fmt.bytes(s.memTotalBytes)). Memory pressure \(s.memPressureLevel >= 4 ? "critical" : s.memPressureLevel >= 2 ? "high" : "normal"), swap \(Fmt.bytes(s.swapUsedBytes))")
             // An Intel Mac has no readable sensor.
             if let t = s.chipTempC {
-                Button { ui.activity(.hours) } label: { Metric("Chip heat", String(format: "%.0f°", t), hot: s.thermal == "serious" || s.thermal == "critical") }.buttonStyle(PressStyle())
+                Button { ui.activity(.hours) } label: { Metric("Temperature", String(format: "%.0f°", t), hot: s.thermal == "serious" || s.thermal == "critical") }.buttonStyle(PressStyle())
             } else if let g = s.gpuPercent {
                 Button { ui.activity(.cpu) } label: { Metric("GPU", String(format: "%.0f%%", g), hot: false) }.buttonStyle(PressStyle())
             }
-            Button { ui.go(.disk) } label: { Metric("Disk free", Fmt.drive(s.diskFreeBytes), hot: s.diskUsedPercent >= 95) }.buttonStyle(PressStyle())
+            Button { ui.go(.disk) } label: { Metric("Free space", Fmt.drive(s.diskFreeBytes), hot: s.diskUsedPercent >= 95) }.buttonStyle(PressStyle())
         }
         .frame(height: 34)
     }
@@ -188,9 +188,9 @@ private struct NeedRow: View {
             .buttonStyle(.plain)
             if inside, let later {
                 Button { withAnimation(.spring(response: 0.35, dampingFraction: 0.85), later) } label: {
-                    Text("Not today").font(.system(size: 10)).foregroundStyle(.secondary).fixedSize().contentShape(Rectangle())
+                    Text("Hide until tomorrow").font(.system(size: 10)).foregroundStyle(.secondary).fixedSize().contentShape(Rectangle())
                 }
-                .buttonStyle(.plain).help("Back tomorrow, if it is still so")
+                .buttonStyle(.plain).help("Hidden until tomorrow, then shown if it still applies")
             }
             Button(action: press) {
                 Text(need.verb).font(.system(size: 10, weight: .semibold)).fixedSize().pill()
@@ -200,7 +200,7 @@ private struct NeedRow: View {
         .frame(height: 38)
         .onHover { inside = $0; hover($0) }
         .help(need.title + (need.detail.isEmpty ? "" : "\n" + need.detail))
-        .contextMenu { if let later { Button("Not today", action: later) } }
+        .contextMenu { if let later { Button("Hide until tomorrow", action: later) } }
         .accessibilityElement(children: .contain)
     }
 }
@@ -226,7 +226,7 @@ struct WelcomePage: View {
         .tile()
         VStack(alignment: .leading, spacing: 9) {
             Check(title: "Open at login", isOn: $wantsLogin)
-            Check(title: "Silent alerts when something is wrong", isOn: $wantsAlerts)
+            Check(title: "Silent notifications when something is wrong", isOn: $wantsAlerts)
         }
         .tile()
         if !AppInfo.isInApplications {

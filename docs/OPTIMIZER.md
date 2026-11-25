@@ -53,7 +53,8 @@ Only rows worth it: relief × hours ahead × (4 s per GB-hour strained, 20 criti
 total cost that reaches the target, by dynamic programming over 64 MB units: exact, ties to fewer rows, and the same whatever order rows come in.
 A leftover process using 10% of the CPU or more is suggested whatever memory does.
 
-Your rules still decide what is ticked when the plan opens. The suggestion is a mark and one press, "Select the suggested".
+Your rules decide what is ticked when the plan opens, and only while memory is short. When it is not, nothing is ticked:
+a tick beside "Nothing to do" would say the opposite. The suggestion is a mark and one press, "Select the suggested".
 What that press ticks is Pulse's choice, so it teaches only as accepted, and what it unticks teaches nothing.
 
 ## 4. Words

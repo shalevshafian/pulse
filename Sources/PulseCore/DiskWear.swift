@@ -31,11 +31,11 @@ extension HealthRules {
             .init("smart", .storage, state, title, detail, weight: weight, fix: fix)
         }
         // Spare too low, unreliable, read only, its backup power failed. Heat is the second bit.
-        if w.criticalWarning & 0b11101 != 0 { return check(.urgent, "The disk reports a fault", "Back up now.", 30, .timeMachine) }
-        if w.percentUsed >= 100 { return check(.urgent, "Disk wear \(w.percentUsed)%", life + " It can fail without warning. Back up now.", 15, .timeMachine) }
+        if w.criticalWarning & 0b11101 != 0 { return check(.urgent, "The disk reports a fault", "Back up before using it further.", 30, .timeMachine) }
+        if w.percentUsed >= 100 { return check(.urgent, "SSD wear \(w.percentUsed)%", life + " It can fail without warning. Back up before using it further.", 15, .timeMachine) }
         if w.mediaErrors > 0 { return check(.attention, "The disk lost data \(Plural.count(Int(clamping: w.mediaErrors), "time"))", "It could not read back what was written. Keep a backup.", 10, .timeMachine) }
-        if w.percentUsed >= 80 { return check(.attention, "Disk wear \(w.percentUsed)%", life + " " + written + ".", 8, .timeMachine) }
+        if w.percentUsed >= 80 { return check(.attention, "SSD wear \(w.percentUsed)%", life + " " + written + ".", 8, .timeMachine) }
         if w.criticalWarning & 0b10 != 0 { return check(.attention, "The disk is too hot", "It slows itself down.", 5, nil) }
-        return check(.ok, "Disk wear \(w.percentUsed)%", written, 0, nil)
+        return check(.ok, "SSD wear \(w.percentUsed)%", written, 0, nil)
     }
 }

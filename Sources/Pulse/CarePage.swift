@@ -10,7 +10,7 @@ struct CarePage: View {
         let h = model.health
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(h.score.map { "Score \($0)" } ?? "Not checked yet").font(.system(size: 14, weight: .semibold))
+                Text(h.score.map { "Health score \($0)" } ?? "Not checked yet").font(.system(size: 14, weight: .semibold))
                 Text(model.checking ? "Checking…" : model.checkedAgo).font(.system(size: 10)).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
@@ -19,7 +19,7 @@ struct CarePage: View {
                 Image(systemName: "arrow.clockwise").font(.system(size: 11, weight: .medium)).frame(width: 26, height: 26)
                     .overlay(Circle().strokeBorder(Color.primary.opacity(0.18))).contentShape(Circle())
             }
-            .buttonStyle(PressStyle()).disabled(model.checking).help("Check everything again").accessibilityLabel("Check again")
+            .buttonStyle(PressStyle()).disabled(model.checking).help("Check now").accessibilityLabel("Check now")
         }
         .frame(height: 34).padding(.horizontal, 2)
         VStack(spacing: 0) {
@@ -46,22 +46,22 @@ struct CarePage: View {
         let ticked = model.settings.sleepDrives.count
         let startup = h.report?.startup ?? []
         return [
-            Row(icon: "waveform.path.ecg", title: "Health", state: h.report == nil ? "Not checked yet" : problems.isEmpty ? "Nothing to fix" : "\(problems.count) to fix: \(problems[0].title)", page: .health,
+            Row(icon: "waveform.path.ecg", title: "Health check", state: h.report == nil ? "Not checked yet" : problems.isEmpty ? "Nothing to fix" : "\(problems.count) to fix: \(problems[0].title)", page: .health,
                 mark: problems.contains { $0.state == .urgent } ? .urgent : problems.isEmpty ? .ok : .attention),
             Row(icon: "shippingbox", title: "Cleanup", state: free.isEmpty ? "Nothing to clear" : "\(Fmt.bytes(free.reduce(0) { $0 + $1.bytes })) in \(Plural.count(free.count, "place"))", page: .cleanup),
-            Row(icon: "internaldrive", title: "Disk", state: "\(Fmt.drive(s.diskFreeBytes)) free of \(Fmt.drive(s.diskTotalBytes))" + (h.report?.wear.map { ", wear \($0)%" } ?? ""), page: .disk, mark: h.state(of: .storage) == .urgent ? .urgent : .ok),
+            Row(icon: "internaldrive", title: "Storage", state: "\(Fmt.drive(s.diskFreeBytes)) free of \(Fmt.drive(s.diskTotalBytes))" + (h.report?.wear.map { ", SSD wear \($0)%" } ?? ""), page: .disk, mark: h.state(of: .storage) == .urgent ? .urgent : .ok),
             Row(icon: "moon", title: "Sleep", state: awake.map { a in a.first.map { "Awake because of \($0.name)" + (a.count > 1 ? " and \(a.count - 1) more" : "") } ?? "Nothing keeps it awake" } ?? "What keeps it awake", page: .sleep),
-            Row(icon: "externaldrive", title: "Drives in sleep", state: model.drivesOut.isEmpty ? (ticked == 0 ? "None is disconnected" : "\(Plural.count(ticked, "drive")) disconnected before sleep") : "\(model.drivesOut.count) still disconnected", page: .drives,
+            Row(icon: "externaldrive", title: "Unmount drives for sleep", state: model.drivesOut.isEmpty ? (ticked == 0 ? "None chosen" : "\(Plural.count(ticked, "drive")) chosen") : "\(model.drivesOut.count) still unmounted", page: .drives,
                 mark: model.drivesOut.isEmpty ? .ok : .attention),
             Row(icon: "battery.75percent", title: "Battery", state: battery, page: .health, mark: h.state(of: .battery) == .ok || h.state(of: .battery) == .unknown ? .ok : .attention),
-            Row(icon: "power", title: "Startup", state: first(.startup)?.title ?? (startup.isEmpty ? "Not checked yet" : Plural.count(startup.count, "item")), page: .startup, mark: h.state(of: .startup) == .attention ? .attention : .ok),
+            Row(icon: "power", title: "Login items", state: first(.startup)?.title ?? (startup.isEmpty ? "Not checked yet" : Plural.count(startup.count, "item")), page: .startup, mark: h.state(of: .startup) == .attention ? .attention : .ok),
             Row(icon: "clock.arrow.circlepath", title: "History", state: model.receipts.list.first.map { "\($0.title), \(Fmt.ago($0.at))" } ?? "Nothing yet", page: .history),
         ]
     }
 
     private var battery: String {
         guard let c = (model.health.report?.checks ?? []).first(where: { $0.area == .battery }) else { return "Not checked yet" }
-        return c.title.replacingOccurrences(of: "Battery health ", with: "Health ") + (c.detail.isEmpty ? "" : ", " + c.detail)
+        return c.title + (c.detail.isEmpty ? "" : ", " + c.detail)
     }
 
     private struct CareRow: View {
@@ -112,8 +112,9 @@ struct HealthPage: View {
         let checks = model.health.report?.checks ?? []
         let ignored = checks.filter { $0.isProblem && model.health.ignored.contains($0.id) }
         let good = checks.filter { $0.state == .ok }
-        PageHeader(title: "Health", count: nil) { ui.back() }
-        HStack(spacing: 0) {
+        PageHeader(title: "Health check", count: nil) { ui.back() }
+        // Two rows: the names are whole words, and eight do not fit in one.
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 4), spacing: 6) {
             ForEach(HealthArea.allCases, id: \.self) { AreaMark(title: $0.title, state: model.health.state(of: $0)) }
         }
         .padding(.bottom, 4)
@@ -140,7 +141,7 @@ struct HealthPage: View {
                             HStack {
                                 Text(c.title).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
                                 Spacer()
-                                Button("Restore") { model.ignore(c, false) }.buttonStyle(.plain).font(.system(size: 11, weight: .medium))
+                                Button("Stop ignoring") { model.ignore(c, false) }.buttonStyle(.plain).font(.system(size: 11, weight: .medium))
                             }
                         }
                     }
@@ -218,7 +219,7 @@ struct DiskPage: View {
         let s = model.system
         let checks = (model.health.report?.checks ?? []).filter { $0.area == .storage && $0.id != "cleanup" && !($0.id == "disk" && $0.state == .ok) }
         let free = (model.health.report?.cleanup ?? []).filter { $0.blockedBy == nil }
-        PageHeader(title: "Disk") { ui.back() }
+        PageHeader(title: "Storage") { ui.back() }
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: gap) {
                 VStack(alignment: .leading, spacing: 8) {
@@ -236,7 +237,7 @@ struct DiskPage: View {
                     ForEach(checks) { c in Fact(name: c.title, value: c.detail) }
                 }
                 .tile()
-                if !free.isEmpty { line("\(Fmt.bytes(free.reduce(0) { $0 + $1.bytes })) can be cleared", icon: "chevron.right") { ui.go(.cleanup) }.tile() }
+                if !free.isEmpty { line("\(Fmt.bytes(free.reduce(0) { $0 + $1.bytes })) of rebuildable files", icon: "chevron.right") { ui.go(.cleanup) }.tile() }
                 LargeFoldersTile(model: model)
             }
         }
@@ -251,14 +252,14 @@ struct StartupPage: View {
     var body: some View {
         let items = model.health.report?.startup ?? []
         let news = (model.health.report?.checks ?? []).filter { $0.area == .startup && $0.isProblem && !model.health.ignored.contains($0.id) }
-        PageHeader(title: "Startup", count: items.count) { ui.back() }
+        PageHeader(title: "Login items", count: items.count) { ui.back() }
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: gap) {
                 ForEach(news) { c in
                     ProblemCard(check: c, fix: { model.fix($0) }, ignore: { model.ignore(c, true) })
                 }
                 StartupTile(title: "Loaded now", items: items.filter { $0.loaded == true })
-                StartupTile(title: "Set up, not loaded", items: items.filter { $0.loaded != true })
+                StartupTile(title: "Not loaded", items: items.filter { $0.loaded != true })
             }
         }
         .scrollFade()
@@ -274,9 +275,9 @@ struct DrivesPage: View {
 
     var body: some View {
         let rows = model.drives ?? []
-        PageHeader(title: "Drives in sleep", count: rows.count) { ui.back() }
+        PageHeader(title: "Unmount drives for sleep", count: rows.count) { ui.back() }
         AwakeRow(holders: model.snap?.awake) { ui.go(.sleep) }
-        Text("A ticked drive is disconnected just before the Mac sleeps and comes back when it wakes. The others are left alone.")
+        Text("A chosen drive is unmounted just before the Mac sleeps and mounted when it wakes. The others are left alone.")
             .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
         if rows.isEmpty {
             Text(model.drives == nil ? "Checking…" : "No external drive is connected").font(.system(size: 12)).foregroundStyle(.secondary).tile()
@@ -295,7 +296,7 @@ struct DrivesPage: View {
             .scrollFade()
         }
         Spacer(minLength: 0)
-        Text("A drive in use stays connected, and nothing is forced. A closed lid with an external display is not sleep.")
+        Text("A drive in use stays mounted, and nothing is forced. A closed lid with an external display is not sleep.")
             .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
             .onAppear { model.refreshDrives() }
     }

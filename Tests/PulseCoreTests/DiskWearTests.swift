@@ -10,7 +10,7 @@ final class DiskWearTests: XCTestCase {
     func testANewAppleDiskIsFine() {
         let c = HealthRules.wear(w())
         XCTAssertEqual(c.state, .ok)
-        XCTAssertEqual(c.title, "Disk wear 0%")
+        XCTAssertEqual(c.title, "SSD wear 0%")
         XCTAssertEqual(c.detail, "9.1 TB written")
         XCTAssertEqual(HealthRules.wear(w(spare: 50)).state, .ok, "the disk itself says when its spare is too low")
     }
@@ -28,9 +28,9 @@ final class DiskWearTests: XCTestCase {
         func smart(_ text: String?, _ wear: DiskWear?) -> HealthCheck? {
             HealthRules.disk(free: 500, total: 1000, smart: text, wear: wear, history: []).first { $0.id == "smart" }
         }
-        XCTAssertEqual(smart("SMART Status: Verified", nil)?.title, "Disk hardware is fine")
+        XCTAssertEqual(smart("SMART Status: Verified", nil)?.title, "The disk reports no failure")
         XCTAssertEqual(smart(nil, nil)?.state, .unknown)
-        XCTAssertEqual(smart(nil, w(3))?.title, "Disk wear 3%")
+        XCTAssertEqual(smart(nil, w(3))?.title, "SSD wear 3%")
         XCTAssertEqual(smart("SMART Status: Failing", w(3))?.state, .urgent, "macOS says it is failing, whatever the log says")
     }
 

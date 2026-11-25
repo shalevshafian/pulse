@@ -8,7 +8,7 @@ struct LargeFoldersTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            TileLabel("Largest folders in your Library", count: model.largest.map { "\($0.folders.count)" })
+            TileLabel("Largest Library folders", count: model.largest.map { "\($0.folders.count)" })
             if let found = model.largest {
                 if found.folders.isEmpty { Text("None over 1 GB").font(.system(size: 12)).foregroundStyle(.secondary) }
                 Text(Self.note(found)).font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

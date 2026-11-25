@@ -19,14 +19,14 @@ struct PlanPage: View {
         } else {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: gap) {
-                    group("Selected for you", actionable.filter { model.settings.preselects($0) })
-                    group("Not selected", actionable.filter { !model.settings.preselects($0) })
+                    group("Selected for you", actionable.filter { ui.baseline.contains($0.id) })
+                    group("Not selected", actionable.filter { !ui.baseline.contains($0.id) })
                 }
             }
             .scrollFade()
             MainButton(title: chosen.isEmpty ? "Nothing selected" : what(chosen), value: chosen.isEmpty ? nil : "about " + Fmt.bytes(bytes), on: !chosen.isEmpty) {
                 // Rows set by "Select the suggested" are Pulse's choice, not the user's: they teach as accepted, the rest nothing.
-                model.run(chosen, shown: actionable, defaults: ui.baseline ?? model.defaultSelection())
+                model.run(chosen, shown: actionable, defaults: ui.baseline)
                 ui.replace(with: .done)
             }
             .help("What closing these is expected to give back to RAM. Other programs take and give memory at the same time.")

@@ -4,7 +4,7 @@ import Foundation
 /// server (a separate process) read the same rules.
 public struct Settings: Codable, Equatable, Sendable {
     // Rules for the optimize button.
-    /// A session idle at least this long is ticked in the plan.
+    /// A session idle at least this long is ticked in the plan, when memory is short.
     public var autoSelectIdleHours: Double = 12
     /// Leftover agent processes are ticked in the plan. Off until asked for: Pulse recognises
     /// them by how they look, and a tool someone started by hand can look the same.
@@ -38,7 +38,7 @@ public struct Settings: Codable, Equatable, Sendable {
     /// Reads the limits Claude Code and Codex saved. Off until ticked: one of the files also holds the account.
     public var planUsage = false
 
-    /// Drives disconnected before sleep and connected after. Empty until the user ticks one.
+    /// Drives unmounted before sleep and mounted after. Empty until the user ticks one.
     public var sleepDrives: [SleepDrive] = []
 
     /// Rows of the list on the first page put away for a day, and when.
@@ -105,8 +105,10 @@ public struct Settings: Codable, Equatable, Sendable {
         return names.contains { name in words.contains { name.lowercased().contains($0) } }
     }
 
-    /// Whether the optimize plan starts with this row ticked.
-    public func preselects(_ s: Suggestion) -> Bool {
+    /// Whether the optimize plan starts with this row ticked. Never while memory is not short: the plan says
+    /// there is nothing to do, and a tick beside that would say the opposite.
+    public func preselects(_ s: Suggestion, memory: MemoryState?) -> Bool {
+        guard let memory, memory >= .strained else { return false }
         switch s.kind {
         // Idle on paper, but its own processes are running: the user decides, not the rule.
         case .idleSession: return !s.stillWorking && (s.idleSeconds ?? 0) >= autoSelectIdleHours * 3600
