@@ -17,5 +17,9 @@ jobs:
       - run: uname -m && swift --version
       - run: swift test
       - run: ./build.sh
-      # The slice of this runner really starts, and draws.
-      - run: build/Pulse.app/Contents/MacOS/Pulse --render "$RUNNER_TEMP/pulse.png" --page overview --demo
+      # The slice of this runner really starts, and draws. Not on the Intel runner: its virtual GPU reports no
+      # architecture and Metal's loader aborts there. A render draws with Canvas, not with Pulse's own Metal.
+      - if: runner.arch == 'ARM64'
+        run: build/Pulse.app/Contents/MacOS/Pulse --render "$RUNNER_TEMP/pulse.png" --page overview --demo
+      - if: runner.arch == 'X64'
+        run: build/Pulse.app/Contents/MacOS/Pulse --snapshot > "$RUNNER_TEMP/snapshot.json" && head -c 300 "$RUNNER_TEMP/snapshot.json"
