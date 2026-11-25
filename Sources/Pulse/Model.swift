@@ -12,7 +12,20 @@ enum AppInfo {
 
     /// How an agent reaches this copy of Pulse.
     static var mcpCommand: String {
-        "claude mcp add --scope user pulse -- \"\(Bundle.main.executablePath ?? "/Applications/Pulse.app/Contents/MacOS/Pulse")\" --mcp"
+        "claude mcp add --scope user pulse -- \"\(executable)\" --mcp"
+    }
+
+    static var executable: String { Bundle.main.executablePath ?? "/Applications/Pulse.app/Contents/MacOS/Pulse" }
+
+    /// For Codex: its own file, ~/.codex/config.toml. TOML strings take the path as it is, quoted.
+    static var codexConfig: String {
+        "[mcp_servers.pulse]\ncommand = \"\(executable.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))\"\nargs = [\"--mcp\"]\n"
+    }
+
+    static var mcpJSON: String {
+        let server: [String: Any] = ["command": executable, "args": ["--mcp"]]
+        let data = (try? JSONSerialization.data(withJSONObject: ["mcpServers": ["pulse": server]], options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])) ?? Data()
+        return String(decoding: data, as: UTF8.self)
     }
 
     /// Run from the disk image or Downloads, macOS may open it from a read-only copy that is gone tomorrow.
@@ -57,6 +70,19 @@ final class Model: ObservableObject {
     @Published var series: [Double?] = []
     private var seriesOf: String?
     private var history = LoadHistory()
+    /// What the optimizer learned: habits, choices, how promises came out. Belongs to `queue`.
+    private var learned = OptimizerMemory()
+    /// The state of memory with its minute of readings. Main thread.
+    private var tracker = PressureTracker()
+    private var noteSaved = Date.distantPast
+    private var noteState = MemoryState.calm
+    /// What the optimizer says about the newest snapshot.
+    @Published var verdict: Verdict?
+    /// Compressed memory per process and programs with clients, read when the plan opens. Belong to `queue`.
+    private var compressed: (at: Date, map: [Int32: UInt64]?)?
+    private var served: Set<Int32>?
+    /// The last few readings of memory in use, for a before that one moment cannot skew.
+    private var usedRecent: [UInt64] = []
     private var historySaved = Date()
     private var appNames: [String: String] = [:]
     @Published var lastSleep: SleepRecord?
@@ -164,7 +190,7 @@ final class Model: ObservableObject {
         let t = Timer(timeInterval: 2, repeats: true) { [weak self] _ in self?.tick() }
         RunLoop.main.add(t, forMode: .common)
         timer = t
-        if canNotify { queue.async { self.history = LoadHistory.load() } }
+        if canNotify { queue.async { self.history = LoadHistory.load(); self.learned = OptimizerMemory.load() } }
         if writes { receipts = Receipts.load() }
         refreshSnapshot()
         startDriveGuard()
@@ -188,6 +214,15 @@ final class Model: ObservableObject {
         system = reading
         push(&cpuHistory, system.cpuPercent / 100)
         push(&memHistory, system.memPercent / 100)
+        usedRecent = Array((usedRecent + [system.memUsedBytes]).suffix(30))
+        if let vm = reading.vm { tracker.add(vm, level: reading.memPressureLevel, at: ProcessInfo.processInfo.systemUptime) }
+        // For the MCP server: a minute's state, written when it changes and once a minute.
+        if canNotify, tracker.state != noteState || Date().timeIntervalSince(noteSaved) >= 60 {
+            noteState = tracker.state
+            noteSaved = Date()
+            let note = self.note
+            queue.async { note.save() }
+        }
         if let t = system.chipTempC { push(&tempHistory, Self.tempFraction(t)) }
         if let g = system.gpuPercent { push(&gpuHistory, g / 100) }
         if let d = system.netDown, let u = system.netUp { netRates = Array((netRates + [d + u]).suffix(60)) }
@@ -214,14 +249,22 @@ final class Model: ObservableObject {
         let system = self.system
         let settings = self.settings
         let open = panelOpen, keep = canNotify, wanted = seriesOf
+        let front = NSWorkspace.shared.frontmostApplication?.bundleURL?.path, note = self.note
         queue.async {
-            let snap = Snapshot.take(system: system, settings: settings)
+            var snap = Snapshot.take(system: system, settings: settings)
             let now = Date()
             self.history.add(snap.consumers, at: now)
+            self.learned.returns.tick(uptime: ProcessInfo.processInfo.systemUptime)
+            Optimizer.observe(snap, frontmost: front, into: &self.learned.returns, now: now)
+            // What was read when the plan opened holds for a minute: the pids are the same.
+            let cmprs = self.compressed.flatMap { now.timeIntervalSince($0.at) < 60 ? $0.map : nil }
+            let verdict = Optimizer.plan(&snap, compressed: cmprs, served: cmprs == nil ? nil : self.served, frontmost: front,
+                                         memory: self.learned, note: note, history: self.history, now: now)
             // The installed app only: a bench must not write over its history.
             if keep, now.timeIntervalSince(self.historySaved) >= 600 {
                 self.historySaved = now
                 self.history.save(to: LoadHistory.defaultURL)
+                self.learned.save()
             }
             let past = open ? (self.history.rows(now: now), self.history.since(now: now)) : nil
             let series = wanted.map { self.history.series($0, parts: 48, now: now) }
@@ -229,6 +272,7 @@ final class Model: ObservableObject {
                 if let series, wanted == self.seriesOf { self.series = series }
                 if let past { self.past = past.0; self.pastSince = past.1 }
                 self.snap = snap
+                self.verdict = verdict
                 self.refreshing = false
                 self.checkAlerts(snap)
             }
@@ -459,6 +503,10 @@ final class Model: ObservableObject {
         var memAfter: UInt64?
         /// Shutting a simulator down takes seconds; the page says so meanwhile.
         var running = false
+        /// What the closed rows were expected to give back, and whether memory is still being watched.
+        var promised: UInt64 = 0
+        var measuring = false
+        var stateAfter: MemoryState?
     }
 
     /// The rows the plan starts with ticked, by the user's rules.
@@ -476,48 +524,144 @@ final class Model: ObservableObject {
         snap?.sessions.first { $0.pid == pid }.flatMap { $0.sessionId.isEmpty ? nil : .session(cwd: $0.cwd, id: $0.sessionId) }
     }
 
-    func run(_ items: [Suggestion]) {
+    /// The state of memory as the menu bar app follows it.
+    var note: PressureNote {
+        PressureNote(state: tracker.state, swapinRate: tracker.swapinRate, forecastMinutes: tracker.forecastMinutes(), at: Date())
+    }
+
+    /// When the plan opens: what of each program is compressed, and what has clients. Half a second, off the main thread.
+    func preparePlan() {
         guard live else { return }
-        let before = system.memUsedBytes
+        queue.async {
+            if let c = self.compressed, Date().timeIntervalSince(c.at) < 20 { return }
+            self.compressed = (Date(), Compressed.read())
+            self.served = Ports.served()
+            DispatchQueue.main.async { self.refreshSnapshot() }
+        }
+    }
+
+    /// Learns from what the user changed in the plan. Rows nobody touched teach nothing beyond a little.
+    private func learnChoices(chosen: [Suggestion], shown: [Suggestion], defaults: Set<String>) {
+        guard writes else { return }
+        let picked = Set(chosen.map(\.id)), now = Date()
+        let changes = shown.compactMap { s -> (Taste.Choice, String, CandidateKind)? in
+            let on = picked.contains(s.id), was = defaults.contains(s.id)
+            let choice: Taste.Choice? = on && !was ? .ticked : !on && was ? .unticked : on ? .acceptedAsIs : nil
+            return choice.map { ($0, Optimizer.key(s), Optimizer.kind(s)) }
+        }
+        queue.async { for (c, key, kind) in changes { self.learned.taste.learn(c, key: key, kind: kind, now: now) } }
+    }
+
+    private static func median(_ xs: ArraySlice<UInt64>) -> UInt64 {
+        let s = xs.sorted()
+        return s.isEmpty ? 0 : s[s.count / 2]
+    }
+
+    func run(_ items: [Suggestion], shown: [Suggestion] = [], defaults: Set<String> = []) {
+        guard live else { return }
+        learnChoices(chosen: items, shown: shown, defaults: defaults)
+        // Three readings, not one: memory moves by itself from second to second.
+        let before = Self.median(usedRecent.suffix(3))
+        let quiet = usedRecent.suffix(30)
+        let noise = (quiet.max() ?? 0) - (quiet.min() ?? 0)
+        let stateBefore = tracker.state
         let runtimes = snap?.runtimes ?? []
         let settings = self.settings
         let backs = Dictionary(items.filter { $0.kind == .idleSession }.map { ($0.id, back(ofSession: $0.pid)) }, uniquingKeysWith: { a, _ in a })
         result = OptimizeResult(memBefore: before, running: true)
-        // Off the main thread: `simctl shutdown` and `adb emu kill` take seconds.
+        // Off the main thread: `simctl shutdown` and `adb emu kill` take seconds, and quitting apps may take longer.
         DispatchQueue.global(qos: .userInitiated).async {
-            var done: [Receipt] = []
-            for s in items {
-                let ok: Bool
-                let said: String
-                var way: Receipt.Back?
-                switch s.kind {
-                case .idleSession:
-                    ok = s.pid.map { Actions.closeIdleSession(pid: $0) } ?? false
-                    said = ok ? "Session closed" : "Not closed, no longer idle"
-                    way = backs[s.id] ?? nil
-                case .orphan:
-                    ok = (s.pid != nil && s.procStart != nil) && Actions.terminate(pid: s.pid!, expectedStart: s.procStart!)
-                    said = ok ? "Leftover closed" : "Not closed, the process changed"
-                case .runtime:
-                    ok = runtimes.first { $0.id == s.runtimeID }.map { Actions.close($0, settings: settings) } ?? false
-                    said = ok ? "Shut down" : "Not shut down, it changed or failed"
-                case .heavyApp:
-                    ok = DispatchQueue.main.sync { self.quitApp(at: s.bundlePath) }
-                    said = ok ? "Asked to quit" : "Not found"
-                    way = s.bundlePath.map { .app(path: $0) }
-                case .advice:
+            self.perform(items, runtimes: runtimes, settings: settings, backs: backs, before: before, noise: noise, stateBefore: stateBefore)
+        }
+    }
+
+    private func perform(_ items: [Suggestion], runtimes: [DevRuntime], settings: PulseCore.Settings, backs: [String: Receipt.Back?],
+                         before: UInt64, noise: UInt64, stateBefore: MemoryState) {
+        var asked: [(s: Suggestion, ok: Bool, said: String, way: Receipt.Back?)] = []
+        for s in items {
+            switch s.kind {
+            case .idleSession:
+                let ok = s.pid.map { Actions.closeIdleSession(pid: $0) } ?? false
+                asked.append((s, ok, ok ? "Session closed" : "Not closed, no longer idle", backs[s.id] ?? nil))
+            case .orphan:
+                let ok = (s.pid != nil && s.procStart != nil) && Actions.terminate(pid: s.pid!, expectedStart: s.procStart!)
+                asked.append((s, ok, ok ? "Leftover closed" : "Not closed, the process changed", nil))
+            case .runtime:
+                let r = runtimes.first { $0.id == s.runtimeID }
+                // Idle when the plan was made, building now: the tick was for something that is no longer so.
+                if let r, !s.stillWorking, Runtimes.isWorking(r) {
+                    asked.append((s, false, "Not shut down, it started working", nil))
                     continue
                 }
-                done.append(Receipt(at: Date(), title: s.title, detail: said, bytes: s.reclaimBytes, ok: ok, back: ok ? way : nil))
+                let ok = r.map { Actions.close($0, settings: settings) } ?? false
+                asked.append((s, ok, ok ? "Shut down" : "Not shut down, it changed or failed", nil))
+            case .heavyApp:
+                let ok = DispatchQueue.main.sync { self.quitApp(at: s.bundlePath) }
+                asked.append((s, ok, ok ? "Quit" : "Not found", s.bundlePath.map { .app(path: $0) }))
+            case .advice:
+                continue
             }
-            DispatchQueue.main.async {
-                self.changeReceipts { $0.add(done) }
-                self.result = OptimizeResult(receipts: Set(done.map(\.id)), memBefore: before)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-                    self.result?.memAfter = self.system.memUsedBytes
-                    self.refreshSnapshot()
-                }
+        }
+        // Asking is not closing: wait until each has really gone, half a minute at most.
+        let deadline = Date().addingTimeInterval(30)
+        func alive(_ s: Suggestion) -> Bool {
+            switch s.kind {
+            case .heavyApp: return DispatchQueue.main.sync { self.isRunning(s.bundlePath) }
+            case .runtime: return runtimes.first { $0.id == s.runtimeID }.map { Actions.isSame(pid: $0.root.pid, expectedStart: $0.root.lstart) } ?? false
+            default: return s.pid.flatMap { pid in s.procStart.map { Actions.isSame(pid: pid, expectedStart: $0) } } ?? false
             }
+        }
+        while Date() < deadline, asked.contains(where: { $0.ok && alive($0.s) }) { usleep(500_000) }
+        let done = asked.map { a -> Receipt in
+            let still = a.ok && alive(a.s)
+            let said = !still ? a.said : a.s.kind == .heavyApp ? "Did not quit. It may be asking to save." : "Asked to close, still running"
+            var r = Receipt(at: Date(), title: a.s.title, detail: said, bytes: a.s.score?.ramBack ?? a.s.reclaimBytes, ok: a.ok && !still,
+                            back: a.ok && !still ? a.way : nil)
+            r.key = Optimizer.key(a.s)
+            return r
+        }
+        let promised = done.filter(\.ok).reduce(0) { $0 + $1.bytes }
+        let kinds = Array(Set(zip(asked, done).filter { $0.1.ok }.map { Optimizer.kind($0.0.s).rawValue })).sorted()
+        DispatchQueue.main.async {
+            self.changeReceipts { $0.add(done) }
+            self.result = OptimizeResult(receipts: Set(done.map(\.id)), memBefore: before, promised: promised, measuring: promised > 0)
+            // What memory did: three readings, ten to sixteen seconds after the last one went.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 16) {
+                let after = Self.median(self.usedRecent.suffix(3))
+                self.result?.memAfter = after
+                self.result?.measuring = false
+                self.result?.stateAfter = self.tracker.state
+                let outcome = Calibration.Outcome(at: Date(), kinds: kinds, promised: promised, fell: Int64(before) - Int64(after),
+                                                  noise: noise, stateBefore: stateBefore, stateAfter: self.tracker.state)
+                if promised > 0, self.writes { self.queue.async { self.learned.calibration.record(outcome); self.learned.save() } }
+                self.refreshSnapshot()
+            }
+        }
+    }
+
+    /// Everything the optimizer learned, gone. It starts again from what is typical.
+    func forgetLearned() {
+        guard live else { return }
+        queue.async {
+            self.learned = OptimizerMemory()
+            if self.writes { self.learned.save() }
+            DispatchQueue.main.async { self.notice = "Forgotten"; self.refreshSnapshot() }
+        }
+    }
+
+    private func isRunning(_ bundlePath: String?) -> Bool {
+        guard let bundlePath else { return false }
+        return NSWorkspace.shared.runningApplications.contains { $0.bundleURL?.path == bundlePath && !$0.isTerminated }
+    }
+
+    /// The user opened again what Pulse closed: such a thing is not offered again for a day, and counts as kept.
+    func learnOpenedAgain(_ r: Receipt) {
+        guard writes, let key = r.key else { return }
+        let now = Date()
+        let kind: CandidateKind = key.hasPrefix("app:") ? .app : key.hasPrefix("session:") ? .session : key.hasPrefix("leftover:") ? .leftover : .simulator
+        queue.async {
+            self.learned.reopened[key] = now
+            self.learned.taste.learn(.openedAgain, key: key, kind: kind, now: now)
         }
     }
 

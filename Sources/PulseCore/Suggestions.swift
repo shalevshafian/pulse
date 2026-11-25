@@ -19,6 +19,13 @@ public struct Suggestion: Codable, Sendable, Identifiable {
     public var busyChild: String? = nil
     public var runtimeID: String? = nil
     public var runtimeKind: DevRuntime.Kind? = nil
+    /// Every process of the row, for reading what of it is compressed. Not sent to agents.
+    public var pids: [Int32] = []
+    /// The optimizer's score, when it has run.
+    public var score: Score? = nil
+    private enum CodingKeys: String, CodingKey {
+        case kind, title, detail, reclaimBytes, pid, procStart, bundlePath, idleSeconds, cpuPercent, stillWorking, busyChild, runtimeID, runtimeKind, score
+    }
 
     public init(kind: Kind, title: String, detail: String, reclaimBytes: UInt64, pid: Int32?, procStart: String?,
                 bundlePath: String?, idleSeconds: TimeInterval?, cpuPercent: Double? = nil, stillWorking: Bool = false,
@@ -124,6 +131,7 @@ public enum Suggestions {
                 reclaimBytes: s.rssBytes, pid: s.pid, procStart: s.procStart,
                 bundlePath: nil, idleSeconds: s.idleSeconds(now: now),
                 cpuPercent: s.cpu / Double(max(cores, 1)), stillWorking: s.stillWorking, busyChild: s.busyChild))
+            out[out.count - 1].pids = table.tree(of: s.pid).map(\.pid)
         }
 
         for r in runtimes where r.upSeconds >= runtimeAge {
@@ -131,6 +139,7 @@ public enum Suggestions {
                 kind: .runtime, title: r.name, detail: r.handle, reclaimBytes: r.rssBytes,
                 pid: r.root.pid, procStart: r.root.lstart, bundlePath: nil, idleSeconds: r.upSeconds,
                 cpuPercent: r.cpuPercent, stillWorking: r.working, runtimeID: r.id, runtimeKind: r.kind))
+            out[out.count - 1].pids = r.members.map(\.pid)
         }
 
         let me = getpid()
@@ -144,21 +153,20 @@ public enum Suggestions {
                 title: shortCommand(p.command),
                 detail: p.command,
                 reclaimBytes: tree.reduce(0) { $0 + $1.rssBytes }, pid: p.pid, procStart: p.lstart,
-                bundlePath: nil, idleSeconds: now.timeIntervalSince(started)))
+                bundlePath: nil, idleSeconds: now.timeIntervalSince(started), cpuPercent: tree.reduce(0) { $0 + $1.cpu } / Double(max(cores, 1))))
+            out[out.count - 1].pids = tree.map(\.pid)
         }
 
         for a in apps where a.rssBytes >= heavyApp && !protectedBundles.contains(a.bundlePath) {
             out.append(Suggestion(
                 kind: .heavyApp, title: a.name, detail: Plural.count(a.processCount, "process", "processes"),
                 reclaimBytes: a.rssBytes, pid: nil, procStart: nil, bundlePath: a.bundlePath, idleSeconds: nil))
+            out[out.count - 1].pids = table.all.filter { !sessionPids.contains($0.pid) && AppGroups.bundlePath(of: $0.program) == a.bundlePath }.map(\.pid)
         }
 
         if system.memPressureLevel >= 2 {
             out.append(advice((system.memPressureLevel >= 4 ? "Critical" : "High") + " memory pressure",
                               "macOS is compressing and swapping. Start with the idle rows below."))
-        }
-        if system.swapUsedBytes >= 4 << 30 {
-            out.append(advice("Large swap", "macOS is writing memory to disk, and that slows everything."))
         }
         if system.diskTotalBytes > 0, Double(system.diskFreeBytes) / Double(system.diskTotalBytes) < 0.1 {
             out.append(advice("The disk is almost full", "Less than 10% is free."))
@@ -259,7 +267,7 @@ public enum Actions {
         }
     }
 
-    static func isSame(pid: Int32, expectedStart: String) -> Bool {
+    public static func isSame(pid: Int32, expectedStart: String) -> Bool {
         guard pid > 1, pid != getpid(), !expectedStart.isEmpty else { return false }
         let now = Shell.run("/bin/ps", ["-o", "lstart=", "-p", String(pid)])
         return StartTime.normalize(now) == StartTime.normalize(expectedStart)

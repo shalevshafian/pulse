@@ -6,7 +6,7 @@ import PulseCore
 extension Model {
     /// The list on the first page, and the marks on the tabs.
     var needs: [Need] {
-        Needs.build(snap: snap, health: health, plan: settings.planUsage ? plan : [],
+        Needs.build(snap: snap, health: health, plan: settings.planUsage ? plan : [], verdict: verdict,
                     drivesOut: (drives ?? []).filter { d in d.attached && !d.mounted && drivesOut.contains { $0.id == d.id } }.map(\.name),
                     hidden: settings.hidden, settings: settings, now: Date())
     }
@@ -111,12 +111,13 @@ extension Model {
         case .app(let path):
             NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: path), configuration: NSWorkspace.OpenConfiguration()) { app, _ in
                 DispatchQueue.main.async {
-                    if app != nil { self.changeReceipts { $0.markUndone(r.id) } } else { self.notice = "Could not open it" }
+                    if app != nil { self.changeReceipts { $0.markUndone(r.id) }; self.learnOpenedAgain(r) } else { self.notice = "Could not open it" }
                 }
             }
         case .session(let cwd, let id):
             guard let command = Receipts.resume(cwd: cwd, id: id) else { notice = "No session to resume"; return }
             Self.copy(command)
+            learnOpenedAgain(r)
             notice = "Copied. Paste it in a terminal to go on."
         case .trash(let from, let to):
             if Receipts.putBack(from: from, to: to) {

@@ -32,7 +32,7 @@ public enum Needs {
     /// A finding of health and a reading of now can be the same thing said twice.
     static let sameAsNow: Set<String> = ["memory", "thermal", "cleanup"]
 
-    public static func build(snap: Snapshot?, health: HealthStore, plan: [PlanUsage] = [], drivesOut: [String] = [], hidden: [String: Date] = [:],
+    public static func build(snap: Snapshot?, health: HealthStore, plan: [PlanUsage] = [], verdict: Verdict? = nil, drivesOut: [String] = [], hidden: [String: Date] = [:],
                              settings: Settings = Settings(), now: Date) -> [Need] {
         var out: [Need] = []
         if let snap {
@@ -41,6 +41,16 @@ public enum Needs {
                 let top = snap.topMemory.first
                 out.append(Need("memory", .now, s.memPressureLevel >= 4 ? "Memory is critical" : "Memory is under pressure",
                                 top.map { "Biggest: \($0.name), \(gb($0.rssBytes))" } ?? "macOS is compressing and swapping", verb: "Optimize", place: .plan))
+            }
+            if s.memPressureLevel < 2, let v = verdict, v.state >= .strained {
+                // macOS does not warn yet, but pages go to disk and come back every minute.
+                out.append(Need("memory", .now, "Memory is short", "Pages go to disk and come back", verb: "Optimize", place: .plan))
+            } else if let v = verdict, v.state == .tight {
+                out.append(Need("memory-soon", .soon, "Memory is getting tight",
+                                v.forecastMinutes.map { "macOS may warn in about \(Int($0.rounded())) min" } ?? "The compressor holds a lot", verb: "See", place: .plan))
+            }
+            for g in verdict?.growing ?? [] where !g.id.hasPrefix("session:") {
+                out.append(Need("grow:" + g.id, .know, "\(g.name) keeps growing", "\(gb(g.perHour)) an hour, \(gb(g.gained)) in \(g.minutes) min", verb: "Look", place: .row, ref: g.id))
             }
             if s.thermal == "serious" || s.thermal == "critical" {
                 let top = snap.topCPU.first

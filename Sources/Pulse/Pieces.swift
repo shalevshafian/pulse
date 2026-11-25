@@ -482,6 +482,7 @@ struct SessionRow<Trailing: View>: View {
 
 struct PlanRow: View {
     let suggestion: Suggestion
+    var suggested = false
     @Binding var isOn: Bool
 
     private var cpu: String { String(format: "%.0f%%", suggestion.cpuPercent ?? 0) }
@@ -510,8 +511,10 @@ struct PlanRow: View {
     var body: some View {
         HStack(spacing: 6) {
             Check(title: suggestion.title, isOn: $isOn)
-            Text(Fmt.bytes(suggestion.reclaimBytes)).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
+            if suggested { Circle().fill(Ink.ink(.dark)).frame(width: 4, height: 4).help("Suggested") }
+            Text(Fmt.bytes(suggestion.score?.ramBack ?? suggestion.reclaimBytes)).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
         }
+        .help((suggestion.score?.reasons ?? []).joined(separator: "\n"))
         .overlay(alignment: .bottomLeading) {
             Text(what).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
                 .padding(.leading, 24).offset(y: 12)

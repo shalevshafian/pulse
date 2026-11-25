@@ -19,6 +19,8 @@ public struct SystemStats: Codable, Sendable {
     /// Bytes a second over the last reading. Nil until there are two.
     public var netDown: Double? = nil
     public var netUp: Double? = nil
+    /// The kernel's counters behind the pressure level. Nil when they could not be read.
+    public var vm: VMReading? = nil
 
     public var memPercent: Double {
         memTotalBytes == 0 ? 0 : Double(memUsedBytes) / Double(memTotalBytes) * 100
@@ -113,6 +115,7 @@ public final class SystemSampler {
                 host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count)
             }
         }
+        stats.vm = VMReading.read()
         if kr == KERN_SUCCESS {
             let page = UInt64(sysconf(_SC_PAGESIZE))
             // Same sum Activity Monitor calls "Memory Used": app memory + wired + compressed.

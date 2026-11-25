@@ -19,6 +19,8 @@ public struct Receipt: Codable, Sendable, Equatable, Identifiable {
     public var ok: Bool
     public var back: Back?
     public var undone: Bool
+    /// The name the optimizer keeps its habits under, so that opening it again teaches it.
+    public var key: String? = nil
 
     public init(at: Date, title: String, detail: String, bytes: UInt64 = 0, ok: Bool = true, back: Back? = nil) {
         id = UUID(); self.at = at; self.title = title; self.detail = detail; self.bytes = bytes; self.ok = ok; self.back = back; undone = false

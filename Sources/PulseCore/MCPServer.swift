@@ -12,6 +12,7 @@ public final class MCPServer {
     let settings: () -> Settings
     let plan: () -> [PlanUsage]
     let ports: () -> [OpenPort]?
+    let memory: () -> OptimizerMemory
 
     public init(provider: @escaping Provider = { Snapshot.take(system: SystemSampler().sampleBlocking()) },
                 healthStore: @escaping () -> HealthStore = { HealthStore.load() },
@@ -19,7 +20,9 @@ public final class MCPServer {
                 history: @escaping () -> LoadHistory = { LoadHistory.load() },
                 settings: @escaping () -> Settings = { Settings.load() },
                 plan: @escaping () -> [PlanUsage] = { PlanUsage.read() },
-                ports: @escaping () -> [OpenPort]? = { Ports.read() }) {
+                ports: @escaping () -> [OpenPort]? = { Ports.read() },
+                memory: @escaping () -> OptimizerMemory = { OptimizerMemory.load() }) {
+        self.memory = memory
         self.provider = provider
         self.history = history
         self.settings = settings
@@ -27,6 +30,15 @@ public final class MCPServer {
         self.ports = ports
         self.sleepCost = sleepCost
         self.healthStore = healthStore
+    }
+
+    /// Clients may read only the start of it, so the first sentences say everything.
+    static let instructions = "Pulse reports this Mac's load, memory pressure and the Claude Code sessions running on it, read-only: no tool closes or changes anything. Before starting a simulator, an emulator or a large build, call optimize_plan: its state and availableBytes say whether there is room, and its rows what the user could close."
+
+    /// The versions this server speaks. An older or unknown one is answered with the newest of them.
+    static let protocolVersions = ["2024-11-05", "2025-03-26", "2025-06-18"]
+    static func protocolVersion(asked: String?) -> String {
+        asked.flatMap { protocolVersions.contains($0) ? $0 : nil } ?? protocolVersions.last!
     }
 
     static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
@@ -40,6 +52,7 @@ public final class MCPServer {
         ("dev_runtimes", "Booted iOS simulators, running Android emulators and Gradle or Kotlin build daemons on this Mac: name, UDID or emulator serial, memory, CPU share and how long each has been up. Check here before booting another one."),
         ("sleep_blockers", "What asks this Mac not to sleep right now (app, session or process, why, since when), and the last sleeps: how long, how much charge each cost on battery, how often the Mac woke by itself."),
         ("optimize_suggestions", "Ranked suggestions for freeing memory (reclaimBytes is what a row holds now, the most that closing it can give back): long-idle Claude sessions (stillWorking marks one whose own processes are running), leftover agent processes, simulators, emulators and build daemons up for over an hour, heavy apps. Read-only; the user applies them from the Pulse menu bar item."),
+        ("optimize_plan", "Whether closing anything would help this Mac now, and what. state is calm, tight, strained or critical, from the kernel's compressor and swap rates, not from used memory, which is no problem by itself. advice is nothing, later, now or noGoodOption. Each row has a score: what it gives back to RAM, the chance it is wanted within four hours (learned from this user's habits), its cost, its guards and its reasons in words. availableBytes is what can be taken before macOS compresses more: check it before starting something heavy. Read-only; the user closes rows in the panel."),
         ("needs_attention", "What deserves the user's attention on this Mac right now, the costliest first: sessions that wait, memory pressure, heat, health findings, space that can be cleared. The same list the panel opens with."),
         ("open_ports", "TCP ports programs of this user listen on: port, program, pid, and whether it is bound to the network or only to this Mac. Check here before starting a server."),
         ("health_report", "The last health check of this Mac: score out of 100, the open problems (backup, protection, updates, storage, battery, stability, performance, startup items), what could not be read, and folders that can be rebuilt. Reads the stored report and gives its age; it does not run a check."),
@@ -69,10 +82,10 @@ public final class MCPServer {
         switch method {
         case "initialize":
             return result(id, [
-                "protocolVersion": params["protocolVersion"] as? String ?? "2025-06-18",
+                "protocolVersion": Self.protocolVersion(asked: params["protocolVersion"] as? String),
                 "capabilities": ["tools": [String: Any]()],
                 "serverInfo": ["name": "pulse", "version": Self.version],
-                "instructions": "Pulse reports this Mac's load and the Claude sessions running on it. All tools are read-only.",
+                "instructions": Self.instructions,
             ])
         case "ping":
             return result(id, [String: Any]())
@@ -80,7 +93,8 @@ public final class MCPServer {
             return result(id, ["tools": offered.map {
                 ["name": $0.name, "description": $0.description,
                  "inputSchema": ["type": "object", "properties": [String: Any]()],
-                 "annotations": ["readOnlyHint": true]] as [String: Any]
+                 // All three, so a client that drops one still sees a tool that cannot change anything.
+                 "annotations": ["readOnlyHint": true, "destructiveHint": false, "openWorldHint": false, "idempotentHint": true]] as [String: Any]
             }])
         case "tools/call":
             guard let name = params["name"] as? String, let text = call(name) else {
@@ -105,7 +119,9 @@ public final class MCPServer {
         switch name {
         case "needs_attention":
             let s = settings()
-            return json(Needs.build(snap: snap, health: healthStore(), plan: s.planUsage ? plan() : [], hidden: s.hidden, settings: s, now: Date()))
+            var copy = snap
+            let v = Optimizer.plan(&copy, compressed: nil, served: nil, frontmost: nil, memory: memory(), note: PressureNote.load(), history: history(), now: Date())
+            return json(Needs.build(snap: snap, health: healthStore(), plan: s.planUsage ? plan() : [], verdict: v, hidden: s.hidden, settings: s, now: Date()))
         case "system_usage": return json(snap.system)
         case "claude_sessions": return json(snap.sessions)
         case "top_cpu": return json(snap.topCPU)
@@ -114,7 +130,14 @@ public final class MCPServer {
         case "sleep_blockers":
             struct Out: Encodable { var blockers: [AwakeHolder]?, sleeps: [SleepRecord] }
             return json(Out(blockers: snap.awake, sleeps: sleepCost().sleeps))
-        case "optimize_suggestions": return json(snap.suggestions)
+        case "optimize_suggestions":
+            var s = snap
+            _ = Optimizer.plan(&s, compressed: nil, served: nil, frontmost: nil, memory: memory(), note: PressureNote.load(), history: history(), now: Date())
+            return json(s.suggestions)
+        case "optimize_plan":
+            var s = snap
+            return json(Optimizer.plan(&s, compressed: Compressed.read(), served: Ports.served(), frontmost: nil, memory: memory(),
+                                       note: PressureNote.load(), history: history(), now: Date()))
         default: return nil
         }
     }

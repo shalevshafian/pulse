@@ -70,6 +70,13 @@ public enum Runtimes {
         return out.sorted { $0.rssBytes > $1.rssBytes }
     }
 
+    /// Whether it builds or runs something right now, read again from the process table.
+    public static func isWorking(_ r: DevRuntime) -> Bool {
+        let table = ProcTable.live()
+        let cpu = table.tree(of: r.root.pid).reduce(0) { $0 + $1.cpu }
+        return cpu >= ClaudeSession.workingCPU
+    }
+
     static func value(after flag: String, in words: [String]) -> String? {
         guard let i = words.firstIndex(of: flag), i + 1 < words.count else { return nil }
         return words[i + 1]

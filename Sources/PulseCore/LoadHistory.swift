@@ -116,6 +116,31 @@ public struct LoadHistory: Codable, Sendable {
         return out
     }
 
+    /// Rows whose memory has only grown over the last two hours: at least half an hour of points, half a
+    /// gigabyte an hour by Theil-Sen, a gigabyte in all, eight in ten steps up and no fall of a tenth.
+    /// What fills and empties, however high, is not here.
+    public func growing(now: Date) -> [Growing] {
+        let from = Int(now.timeIntervalSince1970) - 24 * Self.width
+        let recent = buckets.filter { $0.start > from }
+        var series: [String: [(Double, Double)]] = [:]
+        for b in recent { for (k, v) in b.memory { series[k, default: []].append((Double(b.start), Double(v))) } }
+        var out: [Growing] = []
+        for (key, points) in series where points.count >= 6 {
+            guard let first = points.first, let last = points.last, last.0 - first.0 >= 1800,
+                  let slope = Robust.theilSen(points), slope * 3600 >= 0.5 * 1_073_741_824, last.1 - first.1 >= 1_073_741_824 else { continue }
+            var up = 0, pairs = 0, high = 0.0, fell = false
+            for (i, p) in points.enumerated() {
+                high = max(high, p.1)
+                if p.1 < high * 0.9 { fell = true }
+                for q in points[(i + 1)...] { pairs += 1; if q.1 > p.1 { up += 1 } }
+            }
+            guard !fell, Double(up) >= 0.8 * Double(pairs), let cut = key.firstIndex(of: ":") else { continue }
+            out.append(Growing(id: key, name: String(key[key.index(after: cut)...]), perHour: UInt64(slope * 3600),
+                               gained: UInt64(last.1 - first.1), minutes: Int((last.0 - first.0) / 60)))
+        }
+        return out.sorted { $0.perHour > $1.perHour }
+    }
+
     public func since(now: Date) -> Date? {
         let oldest = Int(now.timeIntervalSince1970) - Self.width * Self.count
         return buckets.first { $0.start > oldest }.map { Date(timeIntervalSince1970: Double($0.start)) }

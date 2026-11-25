@@ -42,12 +42,8 @@ struct SettingsPage: View {
         }
         .tile()
         VStack(alignment: .leading, spacing: 9) {
-            line(copied ? "Copied" : "Copy the command for Claude Code", icon: copied ? "checkmark" : "doc.on.doc") {
-                Model.copy(AppInfo.mcpCommand)
-                copied = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copied = false }
-            }
-            .help("Pulse is also a read-only MCP server: an agent can see this Mac, and cannot close or change anything.")
+            line("Connect an agent", icon: "chevron.right") { ui.go(.agents) }
+                .help("Pulse is also a read-only MCP server: Claude Code, Codex and others can see this Mac, and cannot close or change anything.")
             Hairline()
             line("Source and updates", icon: "arrow.up.right") { NSWorkspace.shared.open(AppInfo.releases) }
             Hairline()
@@ -217,6 +213,13 @@ struct RulesPage: View {
                     .overlay(Capsule().strokeBorder(Ink.line(.dark)))
                 }
                 .tile()
+                VStack(alignment: .leading, spacing: 8) {
+                    TileLabel("What Pulse learned")
+                    Text("When you used apps, sessions and simulators, which rows you ticked or opened again, and how much memory closing gave back. It only changes the order and the suggestions, and stays on this Mac.")
+                        .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Button("Forget it") { model.forgetLearned() }.buttonStyle(.plain).font(.system(size: 11, weight: .medium))
+                }
+                .tile()
                 Text("Always protected, whatever the rules: Finder, Dock, WindowServer and the other core parts of macOS, and Pulse itself.")
                     .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
             }
@@ -228,5 +231,44 @@ struct RulesPage: View {
         guard !word.isEmpty, !model.settings.neverTouch.contains(word) else { return }
         model.settings.neverTouch.append(word)
         newWord = ""
+    }
+}
+
+/// How an agent reaches Pulse. Pulse writes no other app's settings: it copies the lines, the user pastes them.
+struct AgentsPage: View {
+    @ObservedObject var model: Model
+    @State private var copied: String?
+
+    var body: some View {
+        PageHeader(title: "Connect an agent") { NotificationCenter.default.post(name: PanelView.goTo, object: Page.settings.rawValue) }
+        Text("Pulse answers agents over MCP. It shows them this Mac and changes nothing: every tool only reads.")
+            .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: gap) {
+                agent("Claude Code", "Paste in a terminal.", AppInfo.mcpCommand)
+                agent("Codex", "Paste at the end of ~/.codex/config.toml. The Codex app and the codex command read it; new chats see Pulse.", AppInfo.codexConfig)
+                agent("Other apps", "For a client that takes a JSON file, such as Cursor's ~/.cursor/mcp.json.", AppInfo.mcpJSON)
+            }
+        }
+        .scrollFade()
+    }
+
+    private func agent(_ name: String, _ how: String, _ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(name).font(.system(size: 12, weight: .medium))
+                Spacer()
+                Button {
+                    Model.copy(text)
+                    copied = name
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { if copied == name { copied = nil } }
+                } label: {
+                    Text(copied == name ? "Copied" : "Copy").font(.system(size: 10, weight: .semibold)).pill()
+                }
+                .buttonStyle(PressStyle())
+            }
+            Text(how).font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+        .tile()
     }
 }

@@ -206,7 +206,17 @@ final class CoreTests: XCTestCase {
         let tools = try XCTUnwrap((list["result"] as? [String: Any])?["tools"] as? [[String: Any]])
         // The MCP surface is read-only: an agent must not be able to close a session.
         XCTAssertEqual(tools.compactMap { $0["name"] as? String }.sorted(),
-                       ["claude_sessions", "dev_runtimes", "health_report", "needs_attention", "open_ports", "optimize_suggestions", "recent_load", "sleep_blockers", "system_usage", "top_cpu", "top_memory"])
+                       ["claude_sessions", "dev_runtimes", "health_report", "needs_attention", "open_ports", "optimize_plan", "optimize_suggestions", "recent_load", "sleep_blockers", "system_usage", "top_cpu", "top_memory"])
+        // Codex asks before a call unless the tool says it changes nothing; a client that drops one hint still sees the others.
+        for t in tools {
+            let a = try XCTUnwrap(t["annotations"] as? [String: Any])
+            XCTAssertEqual(a["readOnlyHint"] as? Bool, true)
+            XCTAssertEqual(a["destructiveHint"] as? Bool, false)
+            XCTAssertEqual(a["openWorldHint"] as? Bool, false)
+        }
+        // A version this server does not know is answered with one it does.
+        let odd = try obj(server.handle(#"{"jsonrpc":"2.0","id":9,"method":"initialize","params":{"protocolVersion":"2031-01-01"}}"#))
+        XCTAssertEqual((odd["result"] as? [String: Any])?["protocolVersion"] as? String, "2025-06-18")
         let call = try obj(server.handle(#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"claude_sessions"}}"#))
         let content = try XCTUnwrap((call["result"] as? [String: Any])?["content"] as? [[String: Any]])
         XCTAssertEqual(content.first?["text"] as? String, "[]")

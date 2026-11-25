@@ -120,7 +120,7 @@ public struct HealthStore: Codable, Sendable {
     public var notified: [String: Date] = [:]
     /// The wording and rules the report was made with. A report from another version is taken again.
     public var rules: Int? = HealthStore.currentRules
-    public static let currentRules = 6
+    public static let currentRules = 7
 
     public init() {}
 
@@ -421,9 +421,8 @@ public enum HealthRules {
         } else if s.memTotalBytes > 0 {
             out.append(.init("memory", .performance, .ok, "Memory is not under pressure", String(format: "%.0f%% in use", s.memPercent)))
         } else { out.append(unknown("memory", .performance, "Memory")) }
-        if s.swapUsedBytes >= 4 << 30 {
-            out.append(.init("swap", .performance, .attention, "macOS is writing memory to disk", String(format: "%.1f GB", Double(s.swapUsedBytes) / 1_073_741_824), weight: 5, fix: .plan))
-        }
+        // Swap that is there is not a problem by itself: what counts is pages going out and back, and the
+        // pressure level already says that. A Mac at rest often keeps gigabytes of it.
         if s.thermal == "serious" || s.thermal == "critical" {
             out.append(.init("thermal", .performance, s.thermal == "critical" ? .urgent : .attention, "The Mac slows down from heat", "", weight: 8))
         } else {

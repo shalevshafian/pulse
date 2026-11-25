@@ -6,7 +6,7 @@ import SwiftUI
 enum Page: String {
     case welcome
     case overview, processes, sessions, care, settings
-    case plan, done, process, health, cleanup, disk, startup, sleep, drives, history, display, alerts, rules
+    case plan, done, decides, agents, process, health, cleanup, disk, startup, sleep, drives, history, display, alerts, rules
 }
 
 /// The five places everything is in. Always in sight, always named.
@@ -108,7 +108,8 @@ final class PanelState: ObservableObject {
 
     static func home(of page: Page) -> Page {
         switch page {
-        case .plan, .done: return .overview
+        case .plan, .done, .decides: return .overview
+        case .agents: return .settings
         case .process: return .processes
         case .display, .alerts, .rules: return .settings
         default: return .care
@@ -119,7 +120,7 @@ final class PanelState: ObservableObject {
         guard next != page else { return }
         model.notice = nil
         armed = nil
-        if next == .plan { selected = model.defaultSelection() }
+        if next == .plan, page != .decides { selected = model.defaultSelection(); model.preparePlan() }
         if next == .cleanup { toClean = [] }
         withAnimation(.easeOut(duration: 0.16)) {
             if Tab(root: next) != nil { stack = [next] } else if let i = stack.firstIndex(of: next) { stack = Array(stack[...i]) } else { stack.append(next) }
@@ -228,6 +229,8 @@ struct PanelView: View {
         case .history: HistoryPage(model: model, ui: ui)
         case .plan: PlanPage(model: model, ui: ui)
         case .done: DonePage(model: model, ui: ui)
+        case .decides: DecidesPage(model: model, ui: ui)
+        case .agents: AgentsPage(model: model)
         case .settings: SettingsPage(model: model, ui: ui)
         case .display: DisplayPage(model: model, ui: ui)
         case .alerts: AlertsPage(model: model, ui: ui)
