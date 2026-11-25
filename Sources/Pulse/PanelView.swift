@@ -97,6 +97,10 @@ final class PanelState: ObservableObject {
         // A page deeper than a root has its root to go back to.
         if Tab(root: page) == nil, page != .welcome { stack = [Self.home(of: page), page] }
         row = page == .process ? model.snap?.topCPU.first?.id : nil
+        // For `--render`.
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--sort"), i + 1 < args.count { sort = Sort.allCases.first { "\($0)" == args[i + 1] } ?? .cpu }
+        if args.contains("--armed") { armed = row.map { "page:" + $0 } ?? model.snap?.topCPU.first?.id }
     }
 
     var page: Page { stack.last ?? .overview }
@@ -193,7 +197,7 @@ struct PanelView: View {
         .foregroundStyle(Ink.ink(.dark))
         .background(Ink.base)
         .background { if !inWindow { WindowShape() } }
-        .background { Keys(ui: ui, model: model) }
+        .background { if ui.page != .welcome { Keys(ui: ui, model: model).equatable() } }
         .environment(\.colorScheme, .dark)
         .environment(\.layoutDirection, .leftToRight)
         .onReceive(NotificationCenter.default.publisher(for: Self.goTo)) { n in
@@ -287,9 +291,11 @@ private struct TabBar: View {
 }
 
 /// Everything is reachable without the pointer.
-private struct Keys: View {
-    @ObservedObject var ui: PanelState
+private struct Keys: View, Equatable {
+    // Watches nothing: the keys are the same on every page.
+    let ui: PanelState
     let model: Model
+    static func == (a: Keys, b: Keys) -> Bool { a.ui === b.ui }
 
     var body: some View {
         let tabs = Tab.allCases.filter { $0 != .claude || model.hasClaude }
@@ -302,6 +308,5 @@ private struct Keys: View {
             Button("") { ui.back() }.keyboardShortcut("[", modifiers: .command)
         }
         .opacity(0).frame(width: 0, height: 0).accessibilityHidden(true)
-        .disabled(ui.page == .welcome)
     }
 }

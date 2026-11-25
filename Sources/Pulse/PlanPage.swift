@@ -30,7 +30,7 @@ struct PlanPage: View {
                 }
             }
             .scrollFade()
-            MainButton(title: chosen.isEmpty ? "Nothing selected" : what(chosen), value: chosen.isEmpty ? nil : Fmt.bytes(bytes), on: !chosen.isEmpty) {
+            MainButton(title: chosen.isEmpty ? "Nothing selected" : what(chosen), value: chosen.isEmpty ? nil : Fmt.bytes(bytes) + " in use", on: !chosen.isEmpty) {
                 model.run(chosen)
                 ui.replace(with: .done)
             }
@@ -59,8 +59,8 @@ extension PlanPage {
     /// The result, in words, before it happens.
     private func what(_ chosen: [Suggestion]) -> String {
         let sessions = chosen.filter { $0.kind == .idleSession }.count, rest = chosen.count - sessions
-        if sessions == 0 { return rest == 1 ? "Close \(chosen[0].title)" : "Close \(rest) things" }
-        return "Close \(Plural.count(sessions, "session"))" + (rest > 0 ? ", \(rest) more" : "")
+        if sessions == 0 { return rest == 1 ? "Close \(chosen[0].title)" : "Close \(rest) of these" }
+        return rest > 0 ? "Close \(sessions + rest) of these" : "Close \(Plural.count(sessions, "session"))"
     }
 }
 

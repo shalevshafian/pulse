@@ -152,7 +152,7 @@ struct AlertsPage: View {
                 .tile()
             }
         }
-        .frame(maxHeight: .infinity)
+        .scrollFade()
         HStack {
             Text(model.notice ?? (model.notificationsAllowed == false
                 ? "macOS is blocking notifications from Pulse. Allow them in System Settings, Notifications."

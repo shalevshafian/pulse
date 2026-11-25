@@ -20,7 +20,7 @@
 - Cleanup takes a fixed list, and old build folders that carry cargo's own cache tag, inside the usual code folders.
 - Drives: unmounted, never ejected, never forced. Volumes are kept by UUID; disk images and network volumes are left out.
   A dark wake, or a wake with the lid shut, connects nothing.
-- The first page only leads to things. Nothing is closed, moved or changed from its list.
+- The first page only leads to things. Nothing is closed, cleared or moved from its list; the one thing it does itself is to mount a drive again that Pulse let go of.
 - What Pulse did is a receipt. Putting back never overwrites.
 - MCP tools are read-only. No network code, no administrator rights, no dependencies.
 - No emoji in the interface. The panel is 320 by 440 and does not resize.

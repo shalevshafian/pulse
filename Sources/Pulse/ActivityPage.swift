@@ -113,7 +113,7 @@ struct ActivityPage: View {
         switch ui.sort {
         case .cpu, .memory: return "\(count) rows. Press one to see what it is. The x asks once more before it closes."
         case .hours: return Past.note(since: model.pastSince)
-        case .ports: return "Your own programs. On the network means other machines can try to reach it; the firewall may still stop them."
+        case .ports: return "Your own programs. Network: other machines can try to reach it, unless the firewall stops them."
         }
     }
 }
