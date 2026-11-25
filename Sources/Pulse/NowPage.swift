@@ -117,7 +117,7 @@ struct NowPage: View {
     @ViewBuilder private var mainButton: some View {
         // A size only when closing would help: when memory is not short, a number would be a promise of nothing.
         let v = model.verdict
-        let bytes = v?.advice == .now ? (model.snap?.suggestions ?? []).filter { v?.suggested.contains($0.id) == true }.reduce(0) { $0 + ($1.score?.ramBack ?? 0) } : 0
+        let bytes = v?.advice == .now ? v?.ramBack ?? 0 : 0
         let closes = !model.actionable.isEmpty
         Button { if closes { ui.go(.plan) } else { model.runHealthCheck(shown: true) } } label: {
             HStack(spacing: 7) {

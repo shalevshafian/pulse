@@ -76,8 +76,10 @@ public struct Verdict: Codable, Sendable, Equatable {
     public var detail: String
     /// Compressor bytes to take off; zero when nothing is needed.
     public var target: UInt64
-    /// What the suggested rows give together.
+    /// How much the suggested rows ease the compressor together, against the target.
     public var covers: UInt64
+    /// What they are expected to give back to RAM together: the number a person sees.
+    public var ramBack: UInt64 = 0
     /// Memory that can be taken without macOS compressing more: free and cached. For an agent about to start something heavy.
     public var availableBytes: UInt64
     public var forecastMinutes: Double?
@@ -152,6 +154,7 @@ public enum Optimizer {
         let available = x.vm.map { $0.free + $0.inactive } ?? 0
         var v = Verdict(state: x.state, advice: .nothing, title: "", detail: "", target: target, covers: covers, availableBytes: available,
                         forecastMinutes: x.forecastMinutes, growing: x.growing, scores: scores, basis: x.learned ? "learned" : "instant")
+        v.ramBack = scores.filter(\.suggested).reduce(0) { $0 + $1.ramBack }
         words(&v, memUsed: x.memUsed)
         return v
     }
@@ -218,7 +221,8 @@ public enum Optimizer {
     static func reasons(_ c: Candidate, _ s: Score, idle: Double, seen: Int, cameBack: Int, horizon: TimeInterval) -> [String] {
         var out: [String] = []
         let h = Int(horizon / 3600)
-        let idleWords = idle >= 60 ? "Not used for \(duration(idle))." : "In use."
+        // What Pulse saw, not what it was told: it counts from when it last saw the thing in use, or first saw it at all.
+        let idleWords = idle >= 60 ? "Not seen in use for \(duration(idle))." : "Seen in use just now."
         if seen >= 3 {
             out.append(idleWords + " Of \(seen) pauses this long, \(cameBack) ended within \(h) h.")
         } else if idle >= 60 {
@@ -260,9 +264,8 @@ public enum Optimizer {
             } else {
                 v.advice = .now
                 v.title = "Close " + (n == 1 ? "one row" : "\(n) rows") + " to ease memory"
-                v.detail = v.covers >= v.target
-                    ? "macOS needs about \(gb(v.target)) back. These give about \(gb(v.covers)), and you are the least likely to want them soon."
-                    : "These give about \(gb(v.covers)) of the \(gb(v.target)) macOS needs. The rest is in use."
+                v.detail = (n == 1 ? "It gives" : "They give") + " back about \(gb(v.ramBack)), and you are the least likely to want "
+                    + (n == 1 ? "it" : "them") + " soon." + (v.covers >= v.target ? "" : " It may not be enough: the rest is in use.")
             }
         }
         if v.advice != .now, let g = v.growing.first {

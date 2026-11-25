@@ -8,6 +8,13 @@ public enum Demo {
         diskFreeBytes: 412_000_000_000, diskTotalBytes: 994_000_000_000, thermal: "nominal",
         chipTempC: 54, ssdTempC: 38, batteryTempC: 31, gpuPercent: 17, netDown: 480_000, netUp: 62_000)
 
+    /// The compressor of a 32 GB Mac: at ease, or holding more than macOS likes.
+    public static func vm(short: Bool) -> VMReading {
+        let gb: UInt64 = 1 << 30
+        return short ? VMReading(active: 9 * gb, inactive: 3 * gb, free: gb / 2, compressor: 15 * gb, stored: 41 * gb, total: 32 * gb)
+            : VMReading(active: 11 * gb, inactive: 8 * gb, free: 6 * gb, compressor: 2 * gb, stored: 5 * gb, total: 32 * gb)
+    }
+
     public static func snapshot(now: Date = Date()) -> Snapshot {
         func session(_ pid: Int32, _ name: String, _ project: String, _ from: String, idle hours: Double?, _ mb: UInt64, cpu: Double, child: String? = nil, waits: String? = nil) -> ClaudeSession {
             ClaudeSession(pid: pid, sessionId: "\(pid)", name: name, cwd: "/Users/me/Code/" + project, status: waits != nil ? "waiting" : hours == nil ? "busy" : "idle",

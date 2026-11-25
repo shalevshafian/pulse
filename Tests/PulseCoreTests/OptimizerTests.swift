@@ -218,7 +218,7 @@ final class OptimizerTests: XCTestCase {
         c.compressed = 8 * Self.gb
         let v = Optimizer.decide(.init(candidates: [c], vm: vm(ratio: 0.45), state: .strained, now: now, target: Self.gb))
         let s = v.scores[0]
-        XCTAssertTrue(s.reasons[0].hasPrefix("Not used for 9 h."))
+        XCTAssertTrue(s.reasons[0].hasPrefix("Not seen in use for 9 h."))
         XCTAssertTrue(s.reasons[1].contains("most of it compressed"))
         XCTAssertTrue(s.reasons[1].contains(Optimizer.gb(s.ramBack)))
         // Mostly compressed: what comes back to RAM is far less than what is counted.

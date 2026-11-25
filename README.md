@@ -23,6 +23,12 @@ What does comes first, with the one place where it is dealt with. The rest is a 
 - **Care.** Health every six hours, cleanup, disk and its wear, sleep, drives, battery, startup items and who signed them, and the history of what Pulse did.
 - **Settings.** What the menu bar shows, silent alerts, rules, a shortcut key.
 
+**Optimize knows when closing helps.** Used memory is not a problem on a Mac: macOS keeps files in it. Pulse reads what the kernel
+itself acts on, how much the compressor holds and whether pages go to disk and back, and says "Nothing to do" when that is fine.
+When memory is short it suggests the set of rows that gives back enough with the least chance you want them soon, learned from
+when you used them, and says why in words under each row. Afterwards it measures what memory really did. How it works:
+[docs/OPTIMIZER.md](docs/OPTIMIZER.md).
+
 How it acts is the same everywhere: looking takes one press, closing takes two, the Trash takes a tick and a confirm.
 What has a way back has it beside it: open the app again, resume the session, put the folder back.
 
@@ -52,7 +58,9 @@ Pulse has no network code, no telemetry and no accounts. It asks for no administ
 It reads the process table, the sensors, the state of macOS's own tools and, if it exists,
 `~/.claude/sessions`, where it opens only the `<pid>.json` records. What it keeps is in
 `~/Library/Application Support/Pulse`: settings, health, the last sleeps, the last hundred
-things you had it close or clear, and the names and CPU time of the last twelve hours.
+things you had it close or clear, the names and CPU time of the last twelve hours, and what Optimize learned
+(`learned.json`: names of apps, session folders and simulators, when they were in use, your ticks, and how earlier closes
+came out). Settings, Rules, "Forget it" clears what was learned.
 
 Plan usage is off until you tick it. Then Pulse also reads `~/.claude.json`, which holds your account too, and
 takes only the limits from it, and the end of recent files in `~/.codex/sessions`, only the lines with limits.
@@ -72,8 +80,18 @@ and only when pressed.
 
 ## MCP
 
+Settings, "Connect an agent" copies each of these. Claude Code:
+
 ```sh
 claude mcp add --scope user pulse -- /Applications/Pulse.app/Contents/MacOS/Pulse --mcp
+```
+
+Codex, the app and the command alike: add to `~/.codex/config.toml`. New chats see it; open ones after a restart.
+
+```toml
+[mcp_servers.pulse]
+command = "/Applications/Pulse.app/Contents/MacOS/Pulse"
+args = ["--mcp"]
 ```
 
 Or, for any client that takes a configuration file:
@@ -90,13 +108,14 @@ Or, for any client that takes a configuration file:
 | `recent_load` | CPU time and peak memory of the last twelve hours |
 | `sleep_blockers` | What keeps the Mac awake, and the last sleeps |
 | `dev_runtimes` | Booted simulators, emulators, build daemons |
-| `optimize_suggestions` | What could be closed. The user closes it, in the panel |
+| `optimize_plan` | Whether closing anything would help now, what, why, and the room left before starting something heavy |
+| `optimize_suggestions` | What could be closed, each with its score. The user closes it, in the panel |
 | `needs_attention` | What deserves attention now, the costliest first |
 | `open_ports` | Which program listens where, and whether the network can reach it |
 | `health_report` | The last health check |
 | `plan_usage` | Claude and Codex limits, only when ticked in Settings |
 
-All are read-only.
+All are read-only, and say so to the client (`readOnlyHint`, no `destructiveHint`, no `openWorldHint`), so Codex does not ask before each call.
 
 ## Limits
 

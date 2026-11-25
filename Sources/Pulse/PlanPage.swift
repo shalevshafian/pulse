@@ -151,6 +151,7 @@ struct DecidesPage: View {
                         Hairline()
                         fact("Memory", state(v.state))
                         fact("Needed back", v.target == 0 ? "nothing" : "about " + Fmt.bytes(v.target))
+                        if v.ramBack > 0 { fact("Suggested rows give", "about " + Fmt.bytes(v.ramBack)) }
                         fact("Free and cached", Fmt.bytes(v.availableBytes))
                         if let m = v.forecastMinutes { fact("macOS warns in", "about \(Int(m.rounded())) min") }
                         fact("Read from", v.basis == "learned" ? "the last minute" : "one reading")

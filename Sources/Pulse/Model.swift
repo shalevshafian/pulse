@@ -296,8 +296,20 @@ final class Model: ObservableObject {
         settings = Settings()
         settings.neverTouch = ["Docker", "qemu"]
         settings.includeLeftovers = true
+        // `--pressure`: the same Mac, short of memory.
+        let short = CommandLine.arguments.contains("--pressure")
         system = Demo.system
-        snap = Demo.snapshot()
+        system.vm = Demo.vm(short: short)
+        if short { system.memPressureLevel = 2; system.memUsedBytes = 29 << 30 }
+        var s = Demo.snapshot()
+        s.system = system
+        // What Pulse would have seen over a day: each row idle as long as the demo says.
+        var seen = OptimizerMemory()
+        seen.returns.clock = 200_000
+        for x in s.suggestions { seen.returns.track(Optimizer.key(x), idle: x.idleSeconds, now: Date()) }
+        verdict = Optimizer.plan(&s, compressed: nil, served: [], frontmost: nil, memory: seen,
+                                 note: PressureNote(state: short ? .strained : .calm, swapinRate: 0, forecastMinutes: nil, at: Date()), history: nil, now: Date())
+        snap = s
         health = Demo.health()
         lastSleep = Demo.lastSleep()
         largest = Demo.largest()
@@ -336,7 +348,10 @@ final class Model: ObservableObject {
     /// For `--render`: one synchronous reading, no timers.
     func loadOnce() {
         system = sampler.sampleBlocking()
-        snap = Snapshot.take(system: system, settings: settings)
+        var s = Snapshot.take(system: system, settings: settings)
+        verdict = Optimizer.plan(&s, compressed: Compressed.read(), served: Ports.served(), frontmost: nil, memory: OptimizerMemory.load(),
+                                 note: PressureNote.load(), history: LoadHistory.load(), now: Date())
+        snap = s
     }
 
     // MARK: Health
